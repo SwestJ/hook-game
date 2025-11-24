@@ -1,7 +1,12 @@
-use std::{fmt::Display, ops::{Add, Mul}};
+use std::{
+    fmt::Display,
+    ops::{Add, Mul},
+};
 
-use glam::Vec2;
-use macroquad::shapes::{draw_circle, draw_rectangle};
+use macroquad::{
+    math::Vec2,
+    shapes::{draw_circle, draw_rectangle},
+};
 use serde::{Deserialize, Serialize};
 use typed_builder::TypedBuilder;
 
@@ -12,8 +17,10 @@ pub trait Object: Sized + core::fmt::Debug + Copy + Display {
     fn set_position(&mut self, position: &Position);
     fn update_position(&mut self, v: Magnitude, direction: Direction) {
         self.set_position(
-            &self.physics().calculate_new_position(
-                self.position(), v, direction));
+            &self
+                .physics()
+                .calculate_new_position(self.position(), v, direction),
+        );
     }
     fn physics(&self) -> &Physics;
     fn direction(&self) -> &Direction;
@@ -56,7 +63,11 @@ impl Object for Player {
 }
 impl Display for Player {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Player: {:?}, {}, {:?}", self.health, self.position, self.direction)
+        write!(
+            f,
+            "Player: {:?}, {}, {:?}",
+            self.health, self.position, self.direction
+        )
     }
 }
 
@@ -104,14 +115,25 @@ pub struct Physics {
 impl Physics {
     pub fn accelerate(&self, current_speed: Magnitude, elapsed_time: f32) -> Magnitude {
         let v = current_speed.value();
-        self.max_speed.min(v + self.acceleration * elapsed_time).into()
+        self.max_speed
+            .min(v + self.acceleration * elapsed_time)
+            .into()
     }
 
-    pub fn calculate_new_position(&self, position: Position, speed: Magnitude, direction: Direction) -> Position {
+    pub fn calculate_new_position(
+        &self,
+        position: Position,
+        speed: Magnitude,
+        direction: Direction,
+    ) -> Position {
         Self::calculate_new_position_from_speed(position, speed, direction)
     }
 
-    pub fn calculate_new_position_from_speed(position: Position, speed: Magnitude, direction: Direction) -> Position {
+    pub fn calculate_new_position_from_speed(
+        position: Position,
+        speed: Magnitude,
+        direction: Direction,
+    ) -> Position {
         let velocity = direction * speed;
         Position::new(position.x() + velocity.x(), position.y() + velocity.y())
     }
@@ -137,11 +159,17 @@ impl Drawable for GraphicsObject {
     fn draw(&self, position: Position) {
         match self.shape() {
             Shape::Rectangle(s) => {
-                draw_rectangle(position.x(), position.y(), s.width, s.height, s.color().into());
-            },
+                draw_rectangle(
+                    position.x(),
+                    position.y(),
+                    s.width,
+                    s.height,
+                    s.color().into(),
+                );
+            }
             Shape::Circle(s) => {
                 draw_circle(position.x(), position.y(), s.radius.0, s.color().into());
-            },
+            }
             Shape::Line(s) => todo!(),
             Shape::Point => todo!(),
         }
@@ -158,7 +186,9 @@ impl GraphicsObject {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, derive_more::Add, derive_more::Mul)]
+#[derive(
+    Serialize, Deserialize, Default, Clone, Copy, Debug, derive_more::Add, derive_more::Mul,
+)]
 pub struct Health(u8);
 
 impl From<u8> for Health {
@@ -172,7 +202,7 @@ impl From<u8> for Health {
 pub struct Position(Vec2);
 impl Position {
     pub fn new(x: f32, y: f32) -> Self {
-        Position(Vec2::new(x,y))
+        Position(Vec2::new(x, y))
     }
     pub fn value(&self) -> Vec2 {
         self.0
@@ -277,14 +307,15 @@ impl Velocity {
     }
 }
 
-
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Magnitude(f32);
 impl Magnitude {
     pub const fn new_const(v: f32) -> Magnitude {
         Magnitude(v)
     }
-    pub fn value(&self) -> f32 {self.0}
+    pub fn value(&self) -> f32 {
+        self.0
+    }
 }
 impl Display for Magnitude {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -292,21 +323,17 @@ impl Display for Magnitude {
     }
 }
 impl From<f32> for Magnitude {
-
     fn from(value: f32) -> Self {
         Magnitude(value)
     }
 }
 impl From<i32> for Magnitude {
-
     fn from(value: i32) -> Self {
         Magnitude(value as f32)
     }
 }
 
-
 //* Arithmetic */
-
 impl Add<Magnitude> for Magnitude {
     type Output = Magnitude;
 
@@ -329,11 +356,14 @@ impl Add<Magnitude> for f32 {
     }
 }
 
-impl<T> Mul<T> for Direction where T: Into<Magnitude> {
+impl<T> Mul<T> for Direction
+where
+    T: Into<Magnitude>,
+{
     type Output = Velocity;
 
     fn mul(self, rhs: T) -> Self::Output {
-        Velocity(self.value() * rhs.into().value())
+        Velocity(*self.value() * rhs.into().value())
     }
 }
 

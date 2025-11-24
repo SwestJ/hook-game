@@ -1,6 +1,5 @@
 use either::Either::*;
-use glam::Vec2;
-use macroquad::shapes::*;
+use macroquad::{math::Vec2, shapes::*};
 
 use crate::{
     colors::*,
@@ -52,13 +51,13 @@ pub fn draw_hook(state: &HookStateEnum, goal: Position) {
     match state {
         HookStateEnum::Extending(state) => {
             let position = state.position();
-            draw(&HOOK_EXTENDING, position);
             draw_hook_chain_extending(state.state());
+            draw(&HOOK_EXTENDING, position);
         }
         HookStateEnum::Contracting(state) => {
             let position = state.position();
-            draw(&HOOK_CONTRACTING, position);
             draw_hook_chain_contracting(state.state());
+            draw(&HOOK_CONTRACTING, position);
         }
         HookStateEnum::End => (),
     }
@@ -80,7 +79,17 @@ fn draw_hook_chain_ovals(chain: &Chain) {
         let y = link.y();
         let r = HOOK_DIST_END_CONTRACT / 10.0;
         draw_line(x, y, x_prev, y_prev, 5.0, DARKGRAY.into());
-        draw_circle_lines(x, y, r, 2.0, GRAY.into());
+        x_prev = link.x();
+        y_prev = link.y();
+    }
+
+    let mut x_prev = chain.front().x();
+    let mut y_prev = chain.front().y();
+    for link in chain.iter().skip(1) {
+        let x = link.x();
+        let y = link.y();
+        let r = HOOK_DIST_END_CONTRACT / 10.0;
+        draw_circle_lines(x, y, r, 3.0, GRAY.into());
         x_prev = link.x();
         y_prev = link.y();
     }
@@ -124,8 +133,8 @@ fn draw(shape: &Shape, position: Position) {
     match shape {
         Shape::Rectangle(s) => {
             draw_rectangle(
-                position.x(),
-                position.y(),
+                position.x() - s.width / 2.0,
+                position.y() - s.height / 2.0,
                 s.width,
                 s.height,
                 s.color().into(),
@@ -145,19 +154,19 @@ pub const PLAYER_IDLING: Shape = Shape::Circle(Circle {
 });
 pub const PLAYER_MOVING: Shape = Shape::Circle(Circle {
     radius: Radius(9.0),
-    color: YELLOW,
+    color: BLUE,
 });
 pub const PLAYER_SHOOTING: Shape = Shape::Circle(Circle {
     radius: Radius(10.0),
     color: BLUE,
 });
 pub const HOOK_EXTENDING: Shape = Shape::Rectangle(Rectangle {
-    height: 7.0,
-    width: 7.0,
-    color: RED,
+    height: 10.0,
+    width: 10.0,
+    color: GRAY,
 });
 pub const HOOK_CONTRACTING: Shape = Shape::Rectangle(Rectangle {
-    height: 7.0,
-    width: 7.0,
-    color: GREEN,
+    height: 10.0,
+    width: 10.0,
+    color: GRAY,
 });

@@ -3,10 +3,11 @@
 //* ----------------------------------HOOK----------------------------------*/
 //* ------------------------------------------------------------------------*/
 //* ------------------------------------------------------------------------*/
-pub const HOOK_AMOUNT_LINKS: usize = 30;
+pub const HOOK_AMOUNT_LINKS: usize = 40;
 pub const HOOK_LINK_LENGTH: f32 = 20.0;
-pub const HOOK_EXTENDING_SPEED: Magnitude = Magnitude::new_const(8.0);
-pub const HOOK_CONTRACTING_SPEED: Magnitude = Magnitude::new_const(4.0);
+pub const HOOK_EXTENDING_SPEED: Magnitude = Magnitude::new_const(6.5);
+pub const HOOK_CONTRACTING_SPEED: Magnitude = Magnitude::new_const(3.5);
+// pub const HOOK_CONTRACTING_SPEED: Magnitude = Magnitude::new_const(0.0);
 pub const HOOK_CONTRACTING_HIST_LENGTH: usize = 50;
 pub const HOOK_DIST_END_CONTRACT: f32 = 10.0;
 pub const HOOK_CHAIN_PROJECTION_FACTOR: f32 = 0.1;
@@ -122,8 +123,8 @@ pub mod state_hook {
     };
 
     use either::Either::{self, Left, Right};
-    use glam::Vec2;
     use iter_num_tools::lin_space;
+    use macroquad::math::Vec2;
 
     use crate::{
         model::{Direction, Magnitude, Physics, Position},
