@@ -1,0 +1,17 @@
+[package]
+name = "hook-game"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+derive_more = { version = "2.0.1", features = ["add", "mul"] }
+either = "1.15.0"
+getset = "0.1.6"
+glam = "0.30.9"
+iter_num_tools = "0.7.1"
+macroquad = "0.4.14"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+toml = "0.9.8"
+typed-builder = "0.23.0"
