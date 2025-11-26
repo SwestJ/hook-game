@@ -50,12 +50,12 @@ pub fn draw_player(state: &PlayerStateEnum) {
 pub fn draw_hook(state: &HookStateEnum, goal: Position) {
     match state {
         HookStateEnum::Extending(state) => {
-            let position = state.position();
+            let position = state.state().chain().head().position();
             draw_hook_chain_extending(state.state());
             draw(&HOOK_EXTENDING, position);
         }
         HookStateEnum::Contracting(state) => {
-            let position = state.position();
+            let position = state.state().chain().head().position();
             draw_hook_chain_contracting(state.state());
             draw(&HOOK_CONTRACTING, position);
         }
@@ -64,45 +64,25 @@ pub fn draw_hook(state: &HookStateEnum, goal: Position) {
 }
 
 fn draw_hook_chain_extending(state: &Extending) {
-    draw_hook_chain_ovals(state.hook().chain());
+    draw_hook_chain_ovals(state.chain());
 }
 
 fn draw_hook_chain_contracting(state: &Contracting) {
-    draw_hook_chain_ovals(state.hook().chain());
+    draw_hook_chain_ovals(state.chain());
 }
 
 fn draw_hook_chain_ovals(chain: &Chain) {
-    let mut x_prev = chain.front().x();
-    let mut y_prev = chain.front().y();
-    for link in chain.iter().skip(1) {
-        let x = link.x();
-        let y = link.y();
-        let r = HOOK_DIST_END_CONTRACT / 10.0;
-        draw_line(x, y, x_prev, y_prev, 5.0, DARKGRAY.into());
-        x_prev = link.x();
-        y_prev = link.y();
+    let mut it = chain.chain().iter_full();
+
+    let it_clone = it.clone();
+    let mut prev = it.next().unwrap();
+    for link in it_clone.skip(1) {
+        draw_line(link.x(), link.y(), prev.x(), prev.y(), 5.0, DARKGRAY.into());
+        prev = link;
     }
 
-    let mut x_prev = chain.front().x();
-    let mut y_prev = chain.front().y();
-    for link in chain.iter().skip(1) {
-        let x = link.x();
-        let y = link.y();
-        let r = HOOK_DIST_END_CONTRACT / 10.0;
-        draw_circle_lines(x, y, r, 3.0, GRAY.into());
-        x_prev = link.x();
-        y_prev = link.y();
-    }
-}
-
-fn draw_hook_chain_lines(state: &Contracting) {
-    let chain = state.hook().chain();
-    let mut x_prev = state.position().x();
-    let mut y_prev = state.position().y();
-    for link in chain.iter() {
-        draw_line(link.x(), link.y(), x_prev, y_prev, 1.0, PINK.into());
-        x_prev = link.x();
-        y_prev = link.y();
+    for link in it {
+        draw_circle(link.x(), link.y(), 5.0, GRAY.into());
     }
 }
 
