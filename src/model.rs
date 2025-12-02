@@ -1,6 +1,7 @@
 use std::{
+    f32::consts::PI,
     fmt::Display,
-    ops::{Add, Mul},
+    ops::{Add, Deref, DerefMut, Mul},
     slice::{self, Windows},
 };
 
@@ -13,15 +14,78 @@ use macroquad::{
 use serde::{Deserialize, Serialize};
 use typed_builder::TypedBuilder;
 
+pub const UP: Direction = Direction(Vec2::NEG_Y);
+pub const DOWN: Direction = Direction(Vec2::Y);
+pub const LEFT: Direction = Direction(Vec2::NEG_X);
+pub const RIGHT: Direction = Direction(Vec2::X);
+
+pub const THETA0: Angle<Radians> = Angle(Radians(0.0));
+pub const THETA1: Angle<Radians> = Angle(Radians(PI / 3.0));
+pub const THETA2: Angle<Radians> = Angle(Radians(2.0 * PI / 3.0));
+pub const THETA3: Angle<Radians> = Angle(Radians(PI));
+pub const THETA4: Angle<Radians> = Angle(Radians(4.0 * PI / 3.0));
+pub const THETA5: Angle<Radians> = Angle(Radians(5.0 * PI / 3.0));
+
+pub const UNIT_CIRCLE_RADIUS: f32 = 1.0;
+pub const UNIT_TRIANGLE_HEIGHT: f32 = 1.5;
+pub const SIN_PI_OVER_3: f32 = 0.866_025_4;
+pub const UNIT_TRIANGLE_SLOPE: f32 = SIN_PI_OVER_3 / UNIT_TRIANGLE_HEIGHT;
+
+pub const COS_THETA0: f32 = 1.0;
+pub const SIN_THETA0: f32 = 0.0;
+pub const COS_THETA1: f32 = 0.5;
+pub const SIN_THETA1: f32 = SIN_PI_OVER_3;
+pub const COS_THETA2: f32 = -0.5;
+pub const SIN_THETA2: f32 = SIN_PI_OVER_3;
+pub const COS_THETA3: f32 = -1.0;
+pub const SIN_THETA3: f32 = 0.0;
+pub const COS_THETA4: f32 = -0.5;
+pub const SIN_THETA4: f32 = -SIN_PI_OVER_3;
+pub const COS_THETA5: f32 = 0.5;
+pub const SIN_THETA5: f32 = -SIN_PI_OVER_3;
+
+pub const THETA0_UNIT: Vec2 = Vec2 { x: COS_THETA0, y: SIN_THETA0 };
+pub const THETA1_UNIT: Vec2 = Vec2 { x: COS_THETA1, y: SIN_THETA1 };
+pub const THETA2_UNIT: Vec2 = Vec2 { x: COS_THETA2, y: SIN_THETA2 };
+pub const THETA3_UNIT: Vec2 = Vec2 { x: COS_THETA3, y: SIN_THETA3 };
+pub const THETA4_UNIT: Vec2 = Vec2 { x: COS_THETA4, y: SIN_THETA4 };
+pub const THETA5_UNIT: Vec2 = Vec2 { x: COS_THETA5, y: SIN_THETA5 };
+
+pub const THETA0_DIRECTION: Direction = Direction(THETA0_UNIT);
+pub const THETA1_DIRECTION: Direction = Direction(THETA1_UNIT);
+pub const THETA2_DIRECTION: Direction = Direction(THETA2_UNIT);
+pub const THETA3_DIRECTION: Direction = Direction(THETA3_UNIT);
+pub const THETA4_DIRECTION: Direction = Direction(THETA4_UNIT);
+pub const THETA5_DIRECTION: Direction = Direction(THETA5_UNIT);
+
+pub const UNIT_TRIANGLE: Vertices<3> = vertices(0, 0);
+
+const fn vertex_y_from_x_a(x: f32, a: f32) -> f32 {
+    UNIT_TRIANGLE_SLOPE * x - a * UNIT_TRIANGLE_SLOPE
+}
+const fn vertex(x: f32, a: f32) -> Vec2 {
+    Vec2 { x, y: vertex_y_from_x_a(x, a) }
+}
+const fn vertices_inner(ix: f32, ia: f32, factor: f32) -> Vertices<3> {
+    let mut h = UNIT_TRIANGLE_HEIGHT;
+    let x = (ix) * h;
+    let a = (ia + ix) * h;
+    h = h * factor;
+    Vertices([vertex(x, a), vertex(x - h, a), vertex(x - h, a - 2.0 * h)])
+}
+pub const fn vertices(ix: i32, ia: i32) -> Vertices<3> {
+    if (ix + ia) % 2 == 0 {
+        vertices_inner(ix as f32, ia as f32, 1.0)
+    } else {
+        vertices_inner((ix - 1) as f32, ia as f32, -1.0)
+    }
+}
+
 pub trait Object: Sized + core::fmt::Debug + Copy + Display {
     fn position(&self) -> Position;
     fn set_position(&mut self, position: &Position);
     fn update_position(&mut self, v: Magnitude, direction: Direction) {
-        self.set_position(
-            &self
-                .physics()
-                .calculate_new_position(self.position(), v, direction),
-        );
+        self.set_position(&self.physics().calculate_new_position(self.position(), v, direction));
     }
     fn physics(&self) -> &Physics;
     fn direction(&self) -> &Direction;
@@ -38,9 +102,7 @@ pub struct Physics {
 impl Physics {
     pub fn accelerate(&self, current_speed: Magnitude, elapsed_time: f32) -> Magnitude {
         let v = current_speed.value();
-        self.max_speed
-            .min(v + self.acceleration * elapsed_time)
-            .into()
+        self.max_speed.min(v + self.acceleration * elapsed_time).into()
     }
 
     pub fn calculate_new_position(
@@ -66,11 +128,24 @@ impl Physics {
     }
 }
 
+trait Collision {
+    fn collision_box(&self) -> &CollisionBox;
+    fn handle_collision(&mut self, cbox: CollisionBox);
+}
+
+struct CollisionBox {
+    vec1: Vec2,
+    vec2: Vec2,
+}
+
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub struct Position(Vec2);
 impl Position {
     pub fn new(x: f32, y: f32) -> Self {
-        Position(Vec2::new(x, y))
+        Self(Vec2::new(x, y))
+    }
+    pub fn from_vec(vec: Vec2) -> Self {
+        Self(vec)
     }
     pub fn value(&self) -> Vec2 {
         self.0
@@ -84,11 +159,14 @@ impl Position {
     pub fn distance(self, position: &Position) -> f32 {
         self.value().distance(position.value())
     }
-    pub fn direction_to(self, position: Position) -> Direction {
+    pub fn direction_to<T: AsRef<Position>>(self, position: T) -> Direction {
         Direction::a_to_b(self, position)
     }
     pub fn move_towards(self, position: Position, distance: f32) -> Self {
-        self + (self.direction_to(position) * distance)
+        self.move_in_direction(self.direction_to(position), distance)
+    }
+    pub fn move_in_direction(self, direction: Direction, distance: f32) -> Self {
+        self + (direction * distance)
     }
 }
 impl Display for Position {
@@ -106,9 +184,9 @@ impl From<(i32, i32)> for Position {
         Position::from((value.0 as f32, value.1 as f32))
     }
 }
-impl From<Vec2> for Position {
-    fn from(value: Vec2) -> Self {
-        Position::new(value.x, value.y)
+impl AsRef<Vec2> for Position {
+    fn as_ref(&self) -> &Vec2 {
+        &self.0
     }
 }
 
@@ -117,15 +195,14 @@ impl From<Vec2> for Position {
 #[derive(Default, Clone, Copy, Debug, derive_more::Add)]
 pub struct Direction(Vec2);
 impl Direction {
-    pub fn new(x: f32, y: f32) -> Direction {
-        Direction(Vec2::new(x, y).normalize_or_zero())
+    pub fn new(x: f32, y: f32) -> Self {
+        Self(Vec2::new(x, y).normalize_or_zero())
     }
-    pub fn from_vec(vec: Vec2) -> Direction {
-        Direction(vec.normalize_or_zero())
+    pub fn new_vec(vec: Vec2) -> Self {
+        Self(vec.normalize_or_zero())
     }
-
-    pub fn value(&self) -> &Vec2 {
-        &self.0
+    pub const fn value(&self) -> Vec2 {
+        self.0
     }
     pub fn is_zero(&self) -> bool {
         self.value().x == 0.0 && self.value().y == 0.0
@@ -137,11 +214,16 @@ impl Direction {
         self.value().y
     }
     pub fn normalize_or_zero(self) -> Self {
-        Direction::from_vec(*self.value())
+        Direction::new_vec(self.value())
     }
-
-    pub fn a_to_b(a: Position, b: Position) -> Direction {
-        Direction::from_vec(b.value() - a.value())
+    pub fn a_to_b<T: AsRef<Position>, U: AsRef<Position>>(a: U, b: T) -> Self {
+        Self::new_vec(b.as_ref().value() - a.as_ref().value())
+    }
+    pub fn rotate<T>(self, angle: Angle<T>) -> Self
+    where
+        Angle<T>: Into<Direction>,
+    {
+        rotate_by_direction(self, angle.into())
     }
 }
 impl Display for Direction {
@@ -150,10 +232,130 @@ impl Display for Direction {
     }
 }
 
-pub const UP: Direction = Direction(Vec2::NEG_Y);
-pub const DOWN: Direction = Direction(Vec2::Y);
-pub const LEFT: Direction = Direction(Vec2::NEG_X);
-pub const RIGHT: Direction = Direction(Vec2::X);
+impl From<Direction> for Angle<Degrees> {
+    fn from(direction: Direction) -> Self {
+        Angle(Degrees(direction.value().to_angle().to_degrees()))
+    }
+}
+impl From<Angle<Degrees>> for Direction {
+    fn from(angle: Angle<Degrees>) -> Self {
+        Direction::from(angle.to_radians())
+    }
+}
+impl From<Angle<Radians>> for Direction {
+    fn from(angle: Angle<Radians>) -> Self {
+        Direction(Vec2::from_angle(angle.into()))
+    }
+}
+impl AsRef<Vec2> for Direction {
+    fn as_ref(&self) -> &Vec2 {
+        &self.0
+    }
+}
+impl AsRef<Vec2> for Velocity {
+    fn as_ref(&self) -> &Vec2 {
+        &self.0
+    }
+}
+
+pub fn rotate_by_direction<T: AsRef<Vec2>>(vec: T, direction: Direction) -> Direction {
+    Direction(direction.value().rotate(vec.as_ref().to_owned()))
+}
+
+#[derive(Clone, Copy, Debug, derive_more::Add)]
+pub struct Angle<T>(pub T);
+#[derive(Clone, Copy, Debug, derive_more::Add)]
+pub struct Degrees(pub f32);
+#[derive(Clone, Copy, Debug, derive_more::Add)]
+pub struct Radians(pub f32);
+
+//* Angle */
+impl<T> Angle<T>
+where
+    T: Copy,
+{
+    pub fn value(&self) -> T {
+        self.0
+    }
+}
+impl Angle<Degrees> {
+    pub fn new(degrees: f32) -> Self {
+        Self(Degrees(degrees))
+    }
+    pub fn to_radians(self) -> Angle<Radians> {
+        Angle(self.value().to_radians())
+    }
+}
+impl Angle<Radians> {
+    pub fn new(radians: f32) -> Self {
+        Self(Radians(radians))
+    }
+    pub fn to_degrees(self) -> Angle<Degrees> {
+        Angle(self.value().to_degrees())
+    }
+}
+impl Degrees {
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+    pub fn to_radians(self) -> Radians {
+        Radians(self.value().to_radians())
+    }
+}
+impl Radians {
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+    pub fn to_degrees(self) -> Degrees {
+        Degrees(self.value().to_degrees())
+    }
+}
+impl<T> From<T> for Angle<T> {
+    fn from(value: T) -> Self {
+        Angle(value)
+    }
+}
+
+impl From<Degrees> for f32 {
+    fn from(degrees: Degrees) -> Self {
+        degrees.value()
+    }
+}
+impl From<Radians> for f32 {
+    fn from(radians: Radians) -> Self {
+        radians.value()
+    }
+}
+impl<T> From<Angle<T>> for f32
+where
+    T: Copy + Into<f32>,
+{
+    fn from(value: Angle<T>) -> Self {
+        value.value().into()
+    }
+}
+impl From<Degrees> for Radians {
+    fn from(degrees: Degrees) -> Self {
+        degrees.to_radians()
+    }
+}
+impl From<Radians> for Degrees {
+    fn from(radians: Radians) -> Self {
+        radians.to_degrees()
+    }
+}
+impl<T> Deref for Angle<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<T> DerefMut for Angle<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 //* Velocity
 pub struct Velocity(Vec2);
@@ -231,7 +433,7 @@ where
     type Output = Velocity;
 
     fn mul(self, rhs: T) -> Self::Output {
-        Velocity(*self.value() * rhs.into().value())
+        Velocity(self.value() * rhs.into().value())
     }
 }
 
@@ -265,12 +467,7 @@ where
     B: AsRef<T>,
 {
     pub fn new(head: A, tail: B, function: fn(&mut T, &T)) -> Self {
-        Stack {
-            stack: vec![],
-            head,
-            tail,
-            function,
-        }
+        Stack { stack: vec![], head, tail, function }
     }
     pub fn head(&self) -> &A {
         &self.head
@@ -311,16 +508,16 @@ where
     pub fn len(&self) -> usize {
         self.stack.len()
     }
+    pub fn is_empty(&self) -> bool {
+        self.stack.is_empty()
+    }
     pub fn iter_full(
         &self,
     ) -> std::iter::Chain<
         std::iter::Chain<std::array::IntoIter<&T, 1>, slice::Iter<'_, T>>,
         std::array::IntoIter<&T, 1>,
     > {
-        [self.head.as_ref()]
-            .into_iter()
-            .chain(self.stack.iter())
-            .chain([self.tail.as_ref()])
+        [self.head.as_ref()].into_iter().chain(self.stack.iter()).chain([self.tail.as_ref()])
     }
     pub fn iter(&self) -> slice::Iter<'_, T> {
         self.stack.iter()
@@ -330,37 +527,18 @@ where
     }
 
     pub fn fold_into_self(self) -> Self {
-        let Self {
-            mut stack,
-            function,
-            ..
-        } = self;
-        stack.iter_mut().fold(
-            Stack {
-                stack: vec![],
-                ..self
-            },
-            |mut acc, mut current| {
-                function(current, acc.last());
-                acc.push(current.clone());
-                acc
-            },
-        )
+        let Self { mut stack, function, .. } = self;
+        stack.iter_mut().fold(Stack { stack: vec![], ..self }, |mut acc, mut current| {
+            function(current, acc.last());
+            acc.push(current.clone());
+            acc
+        })
     }
     pub fn rfold_into_self(self, init: &[T]) -> Self {
-        let Self {
-            mut stack,
-            head,
-            function,
-            ..
-        } = self;
+        let Self { mut stack, head, function, .. } = self;
 
         let mut stack = stack.iter_mut().rfold(
-            Stack {
-                head,
-                stack: init.into(),
-                ..self
-            },
+            Stack { head, stack: init.into(), ..self },
             |mut acc, mut current| {
                 function(current, acc.last());
                 acc.push(current.clone());
@@ -418,10 +596,7 @@ fn match_slice_examples(vec: &[i32]) {
         [] => println!("Empty"),
         [head] => println!("1 element: {:?}", head),
         [-1, head, middle @ .., tail] => {
-            println!(
-                "1: head, middle, tail: {:?}, {:?}, {:?}",
-                head, middle, tail
-            )
+            println!("1: head, middle, tail: {:?}, {:?}, {:?}", head, middle, tail)
         }
         [-2, head, tail @ ..] => println!("2: head, tail: {:?}, {:?}", head, tail),
         [-3, head, middle @ .., _] => println!("3: head, middle: {:?}, {:?}", head, middle),

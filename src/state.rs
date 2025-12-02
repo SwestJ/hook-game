@@ -3,6 +3,7 @@ use std::fmt::Display;
 use crate::state::player::PlayerStateEnum;
 
 pub mod hook;
+pub mod item;
 pub mod player;
 
 #[derive(Default)]
@@ -18,6 +19,7 @@ impl StateEnum {
             StateEnum::Default => panic!("Default invariant should not be used"),
         }
     }
+
 }
 impl Display for StateEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -27,3 +29,6 @@ impl Display for StateEnum {
         }
     }
 }
+
+
+

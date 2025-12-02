@@ -24,7 +24,7 @@ pub enum PlayerStateEnum {
 impl PlayerStateEnum {
     pub fn new(position: Position, direction: Direction) -> Self {
         Self::Idling(PlayerStateMachine {
-            state: state_player::build_player(position, direction),
+            state: state_player::build(position, direction),
         })
     }
 
@@ -112,7 +112,7 @@ impl PlayerStateMachine<Idling> {
 }
 impl PlayerStateMachine<Moving> {
     fn invoke(self) -> PlayerStateEnum {
-        match self.state.try_move() {
+        match self.state.move_or_idle() {
             Ok(moving) => PlayerStateEnum::Moving(PlayerStateMachine { state: moving }),
             Err(idling) => PlayerStateEnum::Idling(PlayerStateMachine { state: idling }),
         }
@@ -189,10 +189,10 @@ pub mod state_player {
     use crate::{
         input::*,
         model::*,
-        state::{hook::*, player::PLAYER_SPEED},
+        state::{hook::{state_hook::{Extending, HookState}, *}, player::PLAYER_SPEED},
     };
 
-    pub fn build_player(position: Position, direction: Direction) -> Idling {
+    pub fn build(position: Position, direction: Direction) -> Idling {
         Idling::idle(position, direction)
     }
 
@@ -312,7 +312,7 @@ pub mod state_player {
             }
         }
 
-        pub fn try_move(self) -> Result<Self, Idling> {
+        pub fn move_or_idle(self) -> Result<Self, Idling> {
             let direction = get_player_move();
             if direction.is_zero() {
                 Err(Idling::idle(self.position(), self.direction()))
@@ -417,12 +417,60 @@ pub mod state_player {
     impl Duality<Moving, Shooting> {
         pub fn move_or_idle(self) -> Either<Self, Duality<Idling, Shooting>> {
             let Duality { ying, yang } = self;
-            match ying.try_move() {
+            match ying.move_or_idle() {
                 Ok(moving) => Left(Duality { ying: moving, yang }),
                 Err(idling) => Right(Duality { ying: idling, yang }),
             }
         }
     }
+
+    // impl From<Idling> for Moving {
+    //     fn from(value: Idling) -> Self {
+    //         todo!()
+    //     }
+    // }
+
+    // trait Move: PlayerState + Sized + Into<Moving> {
+    //     fn r#move(self) -> Result<Moving, Self> {
+    //         let direction = get_player_move();
+    //         if direction.is_zero() {
+    //             Err(self)
+    //         } else {
+    //             Ok(self.into())
+    //         }
+    //     }
+    // }
+
+    // trait Shoot: PlayerState + Sized + Into<Shooting> {
+    //     fn shoot(self) -> Result<Shooting, Self> {
+    //         if is_shooting() {
+    //             Ok(self.into())
+    //         } else {
+    //             Err(self)
+    //         }
+    //     }
+    // }
+
+    // fn r#move(current: impl Into<Moving>) -> Result<Moving, impl Into<Moving>> {
+    //     let direction = get_player_move();
+    //     if direction.is_zero() {
+    //         Err(current)
+    //     } else {
+    //         Ok(current.into())
+    //     }
+    // }
+
+    // fn shoot(current: impl PlayerState) -> Result<Shooting, impl PlayerState> {
+    //     if is_shooting() {
+    //         Ok(Shooting::shoot(
+    //             current.position(),
+    //             current.direction(),
+    //             HOOK_EXTENDING_SPEED,
+    //         ))
+    //     } else {
+    //         Err(current)
+    //     }
+    // }
 
     impl<A, B> Duality<A, B>
     where

@@ -1,5 +1,11 @@
-use macroquad::color::Color as ColorExt;
+use std::{ops::{Add, Deref, DerefMut}, process::Output};
+
+use macroquad::{
+    color::Color as ColorExt,
+    math::{Rect, Vec2},
+};
 use serde::{Deserialize, Serialize};
+use typenum::P5;
 
 pub trait IShape<T: IBuilder<Self>>: Sized {
     fn builder() -> T {
@@ -9,28 +15,325 @@ pub trait IShape<T: IBuilder<Self>>: Sized {
 
 pub trait IBuilder<T: IShape<Self>>: Sized + Default {}
 
-#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug)]
 pub enum Shape {
+    Polygon(Polygon),
     Rectangle(Rectangle),
+    Triangle(Triangle),
     Circle(Circle),
     Line(Line),
     #[default]
     Point,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+impl From<Polygon> for Shape {
+    fn from(value: Polygon) -> Self {
+        Shape::Polygon(value)
+    }
+}
+impl From<Rectangle> for Shape {
+    fn from(value: Rectangle) -> Self {
+        Shape::Rectangle(value)
+    }
+}
+impl From<Triangle> for Shape {
+    fn from(value: Triangle) -> Self {
+        Shape::Triangle(value)
+    }
+}
+impl From<Circle> for Shape {
+    fn from(value: Circle) -> Self {
+        Shape::Circle(value)
+    }
+}
+impl From<Line> for Shape {
+    fn from(value: Line) -> Self {
+        Shape::Line(value)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Polygon {
+    pub radius: f32,
+    pub sides: u8,
+    pub color: Color,
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Rectangle {
     pub height: f32,
     pub width: f32,
     pub color: Color,
 }
-impl Rectangle {
-    pub fn color(&self) -> &Color {
-        &self.color
+
+#[derive(Clone, Copy, Debug)]
+pub struct Triangle {
+    pub height: f32,
+    pub base: f32,
+    pub color: Color,
+}
+impl Triangle {
+    pub fn vertices(&self) -> TriangleVertices {
+        TriangleVertices(
+            Vec2::new(-self.height / 2.0, self.base / 2.0),
+            Vec2::new(-self.height / 2.0, -self.base / 2.0),
+            Vec2::new(self.height / 2.0, 0.0),
+        )
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
+pub struct TriangleVertices(pub Vec2, pub Vec2, pub Vec2);
+impl TriangleVertices {
+    pub fn rotate<T: AsRef<Vec2>>(self, vec: T) -> Self {
+        let Self(v1, v2, v3) = self;
+        let vec = vec.as_ref();
+        Self(vec.rotate(v1), vec.rotate(v2), vec.rotate(v3))
+    }
+    pub fn translate<T: AsRef<Vec2>>(self, vec: T) -> Self {
+        let Self(v1, v2, v3) = self;
+        let vec = vec.as_ref().to_owned();
+        Self(vec + v1, vec + v2, vec + v3)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Vertices<const N: usize>(pub [Vec2; N]);
+impl<const N: usize> Vertices<N> {
+    fn value(&self) -> [Vec2; N] {
+        self.0
+    }
+}
+impl<const N: usize> Vertices<N> {
+    pub fn rotate_by_angle(self, angle: f32) -> Self {
+        self.rotate_const(Vec2::from_angle(angle))
+    }
+    pub fn rotate<T: AsRef<Vec2>>(self, vector: T) -> Self {
+        self.rotate_const(vector.as_ref().to_owned())
+    }
+    pub const fn rotate_const(mut self, vector: Vec2) -> Self {
+        let mut i = 0;
+        while i < N {
+            self.0[i] = rotate(vector, self.0[i]);
+            i += 1;
+        }
+        self
+    }
+    pub fn translate<T: AsRef<Vec2>>(self, vector: T) -> Self {
+        self.translate_const(vector.as_ref().to_owned())
+    }
+    pub const fn translate_const(mut self, vector: Vec2) -> Self {
+        let mut i = 0;
+        while i < N {
+            self.0[i] = translate(vector, self.0[i]);
+            i += 1;
+        }
+        self
+    }
+    pub fn scale(self, factor: f32) -> Self {
+        Self(self.map(|v| v * factor))
+    }
+}
+impl<const N: usize> Deref for Vertices<N> {
+    type Target = [Vec2; N];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl<const N: usize> DerefMut for Vertices<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub struct VerticesBuilder<const N: usize, const M: usize, const I: usize> {
+    vertices: Vertices<N>,
+    index: usize,
+}
+
+pub struct VerticesBuilder2<const N: usize, const M: usize> {
+    vertices: Vertices<N>,
+    index: usize,
+}
+
+impl<const N: usize, const M: usize> VerticesBuilder2<N, M> {
+    pub const fn fill<const O: usize>(mut self, from: [Vertices<M>; O]) -> VerticesBuilder<N, M, N> {
+        let mut vertices = Vertices([Vec2::NAN; N]);
+        let mut o = 0;
+        while o < O {
+            let mut m = 0;
+            while m < M {
+                vertices.0[m + o*M] = from[o].0[m];
+                m += 1;
+            }
+            o += 1;
+        };
+        VerticesBuilder { vertices: self.vertices, index: N }
+    }
+}
+
+impl<const N: usize, const M: usize> VerticesBuilder<N, M, 0> {
+    pub const fn new() -> Self {
+        VerticesBuilder { vertices: Vertices([Vec2::NAN; N]), index: 0 }
+    }
+}
+
+pub trait GenericSize<const I: usize> {
+    const INDEX: usize;
+    type Item;
+
+    fn insert<const J: usize>(self, from: Self::Item) -> impl GenericSize<J>;
+}
+
+pub struct _VerticesBuilder<const N: usize, T: IndexState> {
+    vertices: Vertices<N>,
+    index: T,
+}
+pub trait IndexState {}
+pub struct IndexZero();
+impl IndexState for IndexZero {}
+pub struct IndexNonZero();
+impl IndexState for IndexNonZero {}
+pub struct IndexLast();
+impl IndexState for IndexLast {}
+// pub trait GenSize {
+//     type Index: IndexState;
+//     type Next: IndexState;
+// }
+
+pub trait Insert {
+    type Item;
+    type Index: IndexState;
+    type Next: IndexState;
+    type Output: Insert<Index = Self::Next>;
+    fn insert(self, _: Self::Item) -> Output;
+}
+// impl<const N: usize, T> GenSize for _VerticesBuilder<N, T> {
+//     type Index = IndexZero;
+//     type Next = IndexNonZero;
+// }
+impl<const N: usize> Insert for _VerticesBuilder<N, IndexZero> {
+    type Item = Vertices<3>;
+    type Index = IndexZero;
+    type Next = IndexNonZero;
+    type Output = _VerticesBuilder<N, IndexNonZero>;
+
+    fn insert(self, _: Self::Item) -> Output {
+        todo!()
+    }
+}
+impl<const N: usize> Insert for _VerticesBuilder<N, IndexNonZero> {
+    type Item = Vertices<3>;
+    type Index = IndexNonZero;
+    type Next = IndexLast;
+    type Output = _VerticesBuilder<N, IndexLast>;
+
+    fn insert(self, _: Self::Item) -> Output {
+        todo!()
+    }
+}
+impl<const N: usize> Insert for _VerticesBuilder<N, IndexLast> {
+    type Item = Vertices<3>;
+    type Index = IndexLast;
+    type Next = IndexLast;
+    type Output = _VerticesBuilder<N, IndexLast>;
+
+    fn insert(self, _: Self::Item) -> Output {
+        todo!()
+    }
+}
+
+impl<const N: usize, const M: usize, const I: usize> VerticesBuilder<N, M, I> {
+    pub const fn insert<const J: usize>(mut self, from: Vertices<M>) -> VerticesBuilder<N, M, J> {
+        assert!(I + M <= N, "Index would be out-of-bounds");
+        assert!(I == self.index, "Index does not match expected value");
+        assert!(J == M + self.index, "Return index does not match expected value");
+        let mut i = 0;
+        while i < M {
+            self.vertices.0[I + i] = from.0[i];
+            i += 1;
+        }
+        VerticesBuilder { vertices: self.vertices, index: J }
+    }
+
+    pub const fn fill<const O: usize>(mut self, from: [Vertices<M>; O]) -> VerticesBuilder<N, M, N> {
+        let mut o = 0;
+        while o < O {
+            let mut m = 0;
+            while m < M {
+                self.vertices.0[m + o*M] = from[o].0[m];
+                m += 1;
+            }
+            o += 1;
+        };
+        VerticesBuilder { vertices: self.vertices, index: N }
+    }
+}
+
+// impl<const N: usize, const I: usize> VerticesBuilder<N, I> {
+//     pub const fn insert<const M: usize, const J: usize>(mut self, from: Vertices<M>) -> VerticesBuilder<N, J> {
+//         assert!(I + M <= N);
+//         assert!(J == I + M);
+
+//         let mut i = 0;
+//         while i < M {
+//             self.vertices.0[I + i] = from.0[i];
+//             i += 1;
+//         }
+//         VerticesBuilder { vertices: self.vertices, index: J }
+//     }
+// }
+
+impl<const N: usize, const M: usize> VerticesBuilder<N, M, N> {
+    pub const fn build(self) -> Vertices<N> {
+        self.vertices
+    }
+}
+
+pub struct V2(pub Vec2);
+impl AsRef<Vec2> for V2 {
+    fn as_ref(&self) -> &Vec2 {
+        &self.0
+    }
+}
+const fn rotate(lhs: Vec2, rhs: Vec2) -> Vec2 {
+    Vec2 { x: lhs.x * rhs.x - lhs.y * rhs.y, y: lhs.y * rhs.x + lhs.x * rhs.y }
+}
+const fn translate(lhs: Vec2, rhs: Vec2) -> Vec2 {
+    Vec2 { x: lhs.x + rhs.x, y: lhs.y + rhs.y }
+}
+// impl Vertices<3> {
+//     pub fn rotate<T: AsRef<Vec2>>(self, vec: T) -> Self {
+//         let Self([v1, v2, v3]) = self;
+//         let vec = vec.as_ref();
+//         Self ([
+//             vec.rotate(v1),
+//             vec.rotate(v2),
+//             vec.rotate(v3),
+//         ])
+//     }
+//     pub fn translate<T: AsRef<Vec2>>(self, vec: T) -> Self {
+//         let Self([v1, v2, v3]) = self;
+//         let vec = vec.as_ref().to_owned();
+//         Self ([
+//             vec + v1,
+//             vec + v2,
+//             vec + v3,
+//         ])
+//     }
+// }
+
+#[derive(Clone, Copy, Debug)]
+pub struct TriangleEquilateral {
+    pub side: f32,
+    pub color: Color,
+}
+impl TriangleEquilateral {
+    pub fn vertices(&self) {}
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Circle {
     pub radius: Radius,
     pub color: Color,
@@ -41,19 +344,14 @@ impl Circle {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Line {
-    length: f32,
-    color: Color,
+    pub length: f32,
+    pub thickness: f32,
+    pub color: Color,
 }
 
-#[derive(Default)]
-pub struct LineBuilder {
-    length: f32,
-    color: Color,
-}
-
-#[derive(Default, Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct Color {
     r: f32,
     g: f32,
@@ -81,32 +379,6 @@ impl From<Color> for ColorExt {
     }
 }
 
-//* Builder without typestate pattern
-
-impl IShape<LineBuilder> for Line {}
-impl IBuilder<Line> for LineBuilder {}
-
-impl LineBuilder {
-    pub fn length(self, length: f32) -> Self {
-        LineBuilder {
-            length,
-            color: self.color,
-        }
-    }
-
-    pub fn color(self, color: Color) -> Self {
-        LineBuilder {
-            length: self.length,
-            color,
-        }
-    }
-
-    pub fn build(self) -> Line {
-        let Self { length, color } = self;
-        Line { length, color }
-    }
-}
-
 //* Typestate pattern using the "Builder<A, B>" approach
 /*
     - In this approach the generic types used for state are more closely coupled with the actual model.
@@ -123,7 +395,7 @@ pub struct CircleBuilder<R, C> {
     color: C,
 }
 
-#[derive(Default, Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct Radius(pub f32);
 impl From<f32> for Radius {
     fn from(value: f32) -> Self {
@@ -146,10 +418,7 @@ impl IBuilder<Circle> for CircleBuilder<NoRadius, NoColor> {}
 impl<C> CircleBuilder<NoRadius, C> {
     pub fn radius(self, radius: f32) -> CircleBuilder<Radius, C> {
         let Self { color, .. } = self;
-        CircleBuilder {
-            radius: Radius(radius),
-            color,
-        }
+        CircleBuilder { radius: Radius(radius), color }
     }
 }
 
@@ -198,39 +467,20 @@ impl IBuilder<Rectangle> for RectangleBuilder<Start> {}
 
 impl RectangleBuilder<Start> {
     pub fn dimensions(self, width: f32, height: f32) -> RectangleBuilder<Dimensions> {
-        RectangleBuilder {
-            height,
-            width,
-            color: self.color,
-            state: Dimensions(()),
-        }
+        RectangleBuilder { height, width, color: self.color, state: Dimensions(()) }
     }
 }
 
 impl RectangleBuilder<Dimensions> {
     pub fn color(self, color: Color) -> RectangleBuilder<Ready> {
         let Self { height, width, .. } = self;
-        RectangleBuilder {
-            height,
-            width,
-            color,
-            state: Ready(()),
-        }
+        RectangleBuilder { height, width, color, state: Ready(()) }
     }
 }
 
 impl RectangleBuilder<Ready> {
     pub fn build(self) -> Rectangle {
-        let Self {
-            height,
-            width,
-            color,
-            ..
-        } = self;
-        Rectangle {
-            height,
-            width,
-            color,
-        }
+        let Self { height, width, color, .. } = self;
+        Rectangle { height, width, color }
     }
 }

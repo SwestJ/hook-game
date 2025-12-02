@@ -41,7 +41,7 @@ impl HookStateEnum {
         amount_of_links: usize,
     ) -> Self {
         Self::Extending(HookStateMachine {
-            state: state_hook::build_hook(speed, direction, origin, amount_of_links),
+            state: state_hook::build(speed, direction, origin, amount_of_links),
         })
     }
 
@@ -121,7 +121,7 @@ pub mod state_hook {
         state::hook::*,
     };
 
-    pub fn build_hook(
+    pub fn build(
         speed: Magnitude,
         direction: Direction,
         origin: Position,
@@ -168,11 +168,8 @@ pub mod state_hook {
 
         pub fn extend_self(self) -> Self {
             let position = self.calculate_new_head_position();
-            let chain = self
-                .chain
-                .update_head_position(position)
-                .move_links_toward_head()
-                .maybe_add_link();
+            let chain =
+                self.chain.update_head_position(position).move_links_toward_head().maybe_add_link();
             Extending { chain, ..self }
         }
 
@@ -228,12 +225,7 @@ pub mod state_hook {
         }
 
         pub fn try_end(self) -> Result<(), Self> {
-            let distance = self.chain.length_straight_line();
-            if distance < HOOK_DIST_END_CONTRACT {
-                Ok(())
-            } else {
-                Err(self)
-            }
+            if self.chain().is_empty() { Ok(()) } else { Err(self) }
         }
     }
 
@@ -245,10 +237,7 @@ pub mod state_hook {
 
     impl Hook {
         fn new(position: Position, direction: Direction) -> Self {
-            Self {
-                direction,
-                link: Link::new(position),
-            }
+            Self { direction, link: Link::new(position) }
         }
         pub fn position(&self) -> Position {
             self.link.position
@@ -258,9 +247,6 @@ pub mod state_hook {
         }
         pub fn direction(&self) -> Direction {
             self.direction
-        }
-        fn direction_towards_next_link(current: Position, next: Position) -> Direction {
-            Direction::a_to_b(current, next)
         }
     }
 
@@ -275,10 +261,7 @@ pub mod state_hook {
             let stack = Stack::new(hook, Tail::new(tail_position), |left, right| {
                 Link::clamp_to_length_mut(left, right, HOOK_LINK_LENGTH)
             });
-            Self {
-                chain: stack,
-                link_length,
-            }
+            Self { chain: stack, link_length }
         }
 
         fn length_straight_line(&self) -> f32 {
@@ -289,13 +272,14 @@ pub mod state_hook {
             self.chain
                 .iter()
                 .skip(1)
-                .fold((0.0, self.first()), |acc, link| {
-                    (acc.0 + link.clone().distance(acc.1), link)
-                })
+                .fold((0.0, self.first()), |acc, link| (acc.0 + link.clone().distance(acc.1), link))
                 .0
         }
         pub fn head(&self) -> &Hook {
             self.chain.head()
+        }
+        pub fn head_direction(&self) -> Direction {
+            self.chain.first().direction(self.chain.head())
         }
         pub fn tail(&self) -> &Tail {
             self.chain.tail()
@@ -317,12 +301,10 @@ pub mod state_hook {
             self.chain.push(link.as_ref().clone());
         }
 
-        /// Updates head position and returns the distance travelled
         pub fn set_head(&mut self, head: Hook) {
             self.chain.set_head(head);
         }
 
-        /// Updates head position and returns the distance travelled
         pub fn set_tail(&mut self, tail: Tail) {
             self.chain.set_tail(tail);
         }
@@ -333,6 +315,10 @@ pub mod state_hook {
 
         pub fn chain(&self) -> &Stack<Link, Hook, Tail> {
             &self.chain
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.chain.is_empty()
         }
 
         pub fn into_iter(self) -> <std::vec::Vec<Link> as std::iter::IntoIterator>::IntoIter {
@@ -369,10 +355,7 @@ pub mod state_hook {
         }
 
         fn move_links_toward_tail(mut self, length: Magnitude) -> Chain {
-            let Chain {
-                mut chain,
-                link_length,
-            } = self;
+            let Chain { mut chain, link_length } = self;
             let last = chain.pop().move_towards(chain.tail(), length.value());
             let chain = chain.rfold_into_self(&[last]);
             Chain { chain, link_length }
@@ -410,9 +393,7 @@ pub mod state_hook {
         }
 
         fn move_by_vector(self, vec: Vec2) -> Self {
-            Link {
-                position: Position::from(self.position().value() + vec),
-            }
+            Link { position: Position::from_vec(self.position().value() + vec) }
         }
 
         /// Moves a link towards another link
@@ -430,9 +411,7 @@ pub mod state_hook {
         fn clamp_to_length(self, link: &Link, link_length: f32) -> Self {
             let current = self.distance(link);
             let diff = current - link_length;
-            Link {
-                position: self.position().move_towards(link.position(), diff.max(0.0)),
-            }
+            Link { position: self.position().move_towards(link.position(), diff.max(0.0)) }
         }
 
         fn clamp_to_length_mut(&mut self, link: &Link, link_length: f32) {
@@ -447,8 +426,11 @@ pub mod state_hook {
             Link { position }
         }
 
-        fn distance<T: AsRef<Position>>(&self, position: T) -> f32 {
+        pub fn distance<T: AsRef<Position>>(&self, position: T) -> f32 {
             self.position().distance(position.as_ref())
+        }
+        pub fn direction<T: AsRef<Position>>(&self, position: T) -> Direction {
+            self.position().direction_to(*position.as_ref())
         }
     }
 
@@ -464,7 +446,7 @@ pub mod state_hook {
         let v_ac = c - a;
         let v_ad = v_ac.project_onto(v_ab);
         let d = v_ad + a;
-        (c + (d - c) * factor).into()
+        Position::from_vec(c + (d - c) * factor)
     }
 
     fn _evenly_spaced_positions(
@@ -474,23 +456,17 @@ pub mod state_hook {
     ) -> VecDeque<Position> {
         let x_space = lin_space(position.x()..goal.x(), amount);
         let y_space = lin_space(position.y()..goal.y(), amount);
-        x_space
-            .zip(y_space)
-            .fold(VecDeque::<Position>::new(), |mut acc, p| {
-                acc.push_back(Position::new(p.0, p.1));
-                acc
-            })
+        x_space.zip(y_space).fold(VecDeque::<Position>::new(), |mut acc, p| {
+            acc.push_back(Position::new(p.0, p.1));
+            acc
+        })
     }
 
     fn _hook_direction_function(position_hook: Position, goal: Position) -> Direction {
         match _hook_path_function(position_hook, goal) {
             Left(f) => {
                 let dx = 30.0;
-                let dx = if position_hook.x() > goal.x() {
-                    -dx
-                } else {
-                    dx
-                };
+                let dx = if position_hook.x() > goal.x() { -dx } else { dx };
                 let x_new = position_hook.x() + dx;
                 Direction::a_to_b(position_hook, Position::new(x_new, f(x_new)))
             }
@@ -615,7 +591,7 @@ pub mod state_hook {
                 "Contracting {}, {}, {}, links: {}, length: {}",
                 self.chain.head().position(),
                 self.speed(),
-                self.chain.head().direction(),
+                self.chain.head_direction(),
                 self.chain().chain.len(),
                 self.chain().length_of_links()
             )

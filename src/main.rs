@@ -4,15 +4,14 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crate::colors::*;
+use crate::draw::*;
 use crate::model::*;
 use crate::state::StateEnum;
 use crate::state::player::PlayerStateEnum;
-use macroquad::file::set_pc_assets_folder;
-use macroquad::text::draw_multiline_text;
-use macroquad::time::get_frame_time;
-use macroquad::window::clear_background;
-use macroquad::window::next_frame;
-use macroquad::window::request_new_screen_size;
+use macroquad::math::Vec2;
+use macroquad::prelude as mq;
+use macroquad::window::screen_height;
+use macroquad::window::screen_width;
 
 mod colors;
 mod draw;
@@ -22,11 +21,16 @@ mod model;
 mod persistence;
 mod state;
 
-const SLEEP_DURATION: u64 = 10;
+const DRAW_SCREEN_WIDTH: f32 = 1200.0;
+const DRAW_SCREEN_HEIGHT: f32 = 800.0;
+
+const DEBUG_DRAW_STATE_TEXT: bool = true;
+const DEBUG_DRAW_GRID: bool = true;
+const DEBUG_DRAW_ORIGIN_FACTOR: Vec2 = Vec2::new(0.5, 0.5);
 
 #[macroquad::main("Hook")]
 async fn main() {
-    request_new_screen_size(1200.0, 800.0);
+    mq::request_new_screen_size(DRAW_SCREEN_WIDTH, DRAW_SCREEN_HEIGHT);
     // set_pc_assets_folder("assets");
 
     let mut states = vec![init_player()];
@@ -34,31 +38,23 @@ async fn main() {
     loop {
         // let delta_time = get_frame_time();
         // Use like "MOVEMENT_SPEED * delta_time;"
-        clear_background(BLACK.into());
+
+        mq::clear_background(BLACK.into());
         invoke_states(&mut states);
         draw_states(&states);
-        draw_debug_text_vec(&states);
-        // sleep(Duration::from_millis(SLEEP_DURATION));
-        next_frame().await
+
+        if DEBUG_DRAW_STATE_TEXT {
+            debug_draw_state_text(&states);
+        }
+        if DEBUG_DRAW_GRID {
+            debug_draw_grid();
+        }
+        mq::next_frame().await
     }
 }
 
 fn init_player() -> StateEnum {
     StateEnum::Player(PlayerStateEnum::new(Position::new(200.0, 200.0), RIGHT))
-}
-
-fn draw_debug_text_vec(states: &[StateEnum]) {
-    let debug_text = states
-        .iter()
-        .fold(String::new(), |acc, s| format!("{}\n{}", acc, s));
-    draw_multiline_text(
-        debug_text.as_str(),
-        20.0,
-        20.0,
-        20.0,
-        None,
-        macroquad::color::RED,
-    );
 }
 
 fn invoke_states(states: &mut [StateEnum]) {
@@ -69,6 +65,9 @@ fn invoke_states(states: &mut [StateEnum]) {
     }
 }
 
-fn draw_states(states: &[StateEnum]) {
-    states.iter().for_each(draw::draw_state);
+pub fn check_collisions(state: &StateEnum) {
+    match state {
+        StateEnum::Player(player_state_enum) => todo!(),
+        StateEnum::Default => todo!(),
+    }
 }
