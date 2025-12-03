@@ -7,19 +7,18 @@ use crate::colors::*;
 use crate::draw::*;
 use crate::model::*;
 use crate::state::StateEnum;
-use crate::state::player::PlayerStateEnum;
+use crate::state::player::PlayerState;
 use macroquad::math::Vec2;
 use macroquad::prelude as mq;
 use macroquad::window::screen_height;
 use macroquad::window::screen_width;
 
-mod colors;
 mod draw;
-mod graphics;
 mod input;
 mod model;
 mod persistence;
 mod state;
+mod util;
 
 const DRAW_SCREEN_WIDTH: f32 = 1200.0;
 const DRAW_SCREEN_HEIGHT: f32 = 800.0;
@@ -33,7 +32,7 @@ async fn main() {
     mq::request_new_screen_size(DRAW_SCREEN_WIDTH, DRAW_SCREEN_HEIGHT);
     // set_pc_assets_folder("assets");
 
-    let mut states = vec![init_player()];
+    let mut states = vec![init_player(), init_item()];
 
     loop {
         // let delta_time = get_frame_time();
@@ -54,7 +53,11 @@ async fn main() {
 }
 
 fn init_player() -> StateEnum {
-    StateEnum::Player(PlayerStateEnum::new(Position::new(200.0, 200.0), RIGHT))
+    StateEnum::Player(PlayerState::new(Position::new(200.0, 200.0), RIGHT))
+}
+
+fn init_item() -> StateEnum {
+    StateEnum::Item(state::item::ItemState::Moving(state::item::build(Position::new(200.0, 200.0), RIGHT, Magnitude::new_const(1.0))))
 }
 
 fn invoke_states(states: &mut [StateEnum]) {
@@ -68,6 +71,7 @@ fn invoke_states(states: &mut [StateEnum]) {
 pub fn check_collisions(state: &StateEnum) {
     match state {
         StateEnum::Player(player_state_enum) => todo!(),
+        StateEnum::Item(_) => todo!(),
         StateEnum::Default => todo!(),
     }
 }

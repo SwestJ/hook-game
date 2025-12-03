@@ -8,16 +8,23 @@ use macroquad::prelude as mq;
 use typenum::*;
 
 use crate::DEBUG_DRAW_ORIGIN_FACTOR;
-use crate::{
-    colors::*,
-    graphics::*,
-    model::*,
-    state::{
-        hook::{state_hook::*, *},
-        player::{state_player::*, *},
-        *,
-    },
-};
+use crate::model::*;
+use crate::state::StateEnum;
+use crate::state::item::ItemState;
+use crate::state::player;
+use crate::state::player::state_player::*;
+use crate::state::hook;
+use crate::state::hook::state_hook::*;
+use crate::state::item::*;
+use colors::*;
+use graphics::*;
+use graphics::hook_graphics::*;
+use hook::*;
+use item_graphics::*;
+use player::*;
+
+pub mod colors;
+pub mod graphics;
 
 pub const PLAYER_IDLING: Circle = Circle { radius: Radius(10.0), color: BLUE };
 pub const PLAYER_MOVING: Circle = Circle { radius: Radius(9.0), color: BLUE };
@@ -26,33 +33,6 @@ pub const HOOK_EXTENDING: Triangle = Triangle { height: 40.0, base: 20.0, color:
 pub const HOOK_CONTRACTING: Triangle = Triangle { height: 40.0, base: 20.0, color: PURPLE };
 pub const HOOK_LINK: Line = Line { length: 5.0, thickness: 5.0, color: DARKGRAY };
 pub const HOOK_LINK_VERTEX: Circle = Circle { radius: Radius(5.0), color: GRAY };
-
-pub const HOOK_GRAPHICS: Vertices<HOOK_NUMBER_OF_VERTICES> =
-    create_vertex_graphics(HOOK_GRAPHICS_ARRAY).rotate_const(THETA1_UNIT);
-
-const HOOK_GRAPHICS_ARRAY: [Vertices<3>; 14] = [
-    vertices(0, 0),
-    vertices(0, 1),
-    vertices(0, 2),
-    vertices(0, 3),
-    vertices(1, 3),
-    vertices(1, 4),
-    vertices(2, 4),
-    vertices(2, 5),
-    vertices(2, 6),
-    vertices(2, 7),
-    vertices(2, 8),
-    vertices(1, 8),
-    vertices(1, 7),
-    vertices(0, 7),
-];
-
-const HOOK_NUMBER_OF_VERTICES: usize = HOOK_GRAPHICS_ARRAY.len() * HOOK_GRAPHICS_ARRAY[0].0.len();
-const fn create_vertex_graphics<const N: usize, const M: usize, const O: usize>(
-    array: [Vertices<M>; O],
-) -> Vertices<N> {
-    VerticesBuilder::<N, M, 0>::new().fill(array).build()
-}
 
 //* Drawing */
 pub fn draw_states(states: &[StateEnum]) {
@@ -72,29 +52,45 @@ impl From<&StateEnum> for Vec<Drawable> {
     fn from(state: &StateEnum) -> Self {
         match state {
             StateEnum::Player(player_state_enum) => player_state_enum.into(),
+            StateEnum::Item(item_state_enum) => item_state_enum.into(),
             StateEnum::Default => todo!(),
         }
     }
 }
 
-impl From<&PlayerStateEnum> for Vec<Drawable> {
-    fn from(value: &PlayerStateEnum) -> Self {
+impl From<&ItemState> for Vec<Drawable> {
+    fn from(value: &ItemState) -> Self {
         match value {
-            PlayerStateEnum::Idling(state) => {
+            ItemState::Moving(state) => {
+                vec![Drawable {
+                    position: state.position(),
+                    direction: state.direction(),
+                    shape: Shape::ItemObject(ITEM_GRAPHICS),
+                }]
+            }
+            ItemState::Hooked(hooked) => todo!(),
+        }
+    }
+}
+
+impl From<&PlayerState> for Vec<Drawable> {
+    fn from(value: &PlayerState) -> Self {
+        match value {
+            PlayerState::Idling(state) => {
                 vec![Drawable {
                     position: state.position(),
                     direction: state.direction(),
                     shape: PLAYER_IDLING.into(),
                 }]
             }
-            PlayerStateEnum::Moving(state) => {
+            PlayerState::Moving(state) => {
                 vec![Drawable {
                     position: state.position(),
                     direction: state.direction(),
                     shape: PLAYER_MOVING.into(),
                 }]
             }
-            PlayerStateEnum::Shooting(state) => {
+            PlayerState::Shooting(state) => {
                 state.state().hook();
                 let mut vec = vec![Drawable {
                     position: state.position(),
@@ -104,7 +100,7 @@ impl From<&PlayerStateEnum> for Vec<Drawable> {
                 vec.append(&mut Vec::<Drawable>::from(state.state().hook()));
                 vec
             }
-            PlayerStateEnum::DualityIdlingShooting(state) => {
+            PlayerState::DualityIdlingShooting(state) => {
                 let mut vec = vec![Drawable {
                     position: state.position(),
                     direction: state.direction(),
@@ -113,7 +109,7 @@ impl From<&PlayerStateEnum> for Vec<Drawable> {
                 vec.append(&mut Vec::<Drawable>::from(state.state().yang().hook()));
                 vec
             }
-            PlayerStateEnum::DualityMovingShooting(state) => {
+            PlayerState::DualityMovingShooting(state) => {
                 let mut vec = vec![Drawable {
                     position: state.position(),
                     direction: state.direction(),
@@ -126,28 +122,28 @@ impl From<&PlayerStateEnum> for Vec<Drawable> {
     }
 }
 
-impl From<&HookStateEnum> for Vec<Drawable> {
-    fn from(state: &HookStateEnum) -> Self {
+impl From<&HookState> for Vec<Drawable> {
+    fn from(state: &HookState) -> Self {
         match state {
-            HookStateEnum::Extending(hook_state_machine) => {
+            HookState::Extending(hook_state_machine) => {
                 let mut vec = vec![Drawable {
                     position: hook_state_machine.state().chain().head().position(),
                     direction: hook_state_machine.state().chain().head_direction(),
-                    shape: HOOK_EXTENDING.into(),
+                    shape: Shape::HookObject(HOOK_GRAPHICS),
                 }];
                 vec.append(&mut Vec::<Drawable>::from(hook_state_machine.state().chain()));
                 vec
             }
-            HookStateEnum::Contracting(hook_state_machine) => {
+            HookState::Contracting(hook_state_machine) => {
                 let mut vec = vec![Drawable {
                     position: hook_state_machine.state().chain().head().position(),
                     direction: hook_state_machine.state().chain().head_direction(),
-                    shape: HOOK_CONTRACTING.into(),
+                    shape: Shape::HookObject(HOOK_GRAPHICS),
                 }];
                 vec.append(&mut Vec::<Drawable>::from(hook_state_machine.state().chain()));
                 vec
             }
-            HookStateEnum::End => {
+            HookState::End => {
                 vec![]
             }
         }
@@ -194,6 +190,10 @@ fn draw_drawable(Drawable { position, direction, shape }: Drawable) {
         Shape::Polygon(polygon) => draw_polygon(polygon, position, direction),
         Shape::Triangle(triangle) => draw_triangle(triangle, position, direction),
         Shape::Point => todo!(),
+        Shape::HookObject(hook) => draw_vertex_graphics(hook.model.rotate(direction).translate(position), hook.color),
+        Shape::ItemObject(item) => {
+            draw_vertex_graphics(item.model.rotate(direction).translate(position), item.color)
+        }
     }
 }
 
@@ -232,43 +232,15 @@ fn draw_rectangle(rectangle: Rectangle, position: Position, direction: Direction
 }
 
 fn draw_triangle(triangle: Triangle, position: Position, direction: Direction) {
-    // let vertices = triangle.vertices().rotate(direction).translate(position);
-    // mq::draw_triangle(vertices.0, vertices.1, vertices.2, triangle.color.into());
-    draw_hook_graphics(position, direction);
+    let vertices = triangle.vertices().rotate(direction).translate(position);
+    mq::draw_triangle(vertices.0, vertices.1, vertices.2, triangle.color.into());
 }
 
-fn draw_hook_graphics(position: Position, direction: Direction) {
-    let vs = HOOK_GRAPHICS.scale(5.0).rotate(direction).translate(position);
-    let mut it = vs.chunks_exact(3);
+fn draw_vertex_graphics<const N: usize>(vertices: Vertices<N>, color: Color) {
+    let mut it = vertices.chunks_exact(3);
     while let Some(&[v1, v2, v3]) = it.next() {
-        mq::draw_triangle(v1, v2, v3, GRAY.into());
+        mq::draw_triangle(v1, v2, v3, color.into());
     }
-}
-
-const _DEV_HOOK_NUMBER_OF_VERTICES: usize = 9;
-const _DEV_HOOK: Vertices<9> = _dev_v2_create_hook_graphics();
-const _DEV_HOOK_INDEXES: [usize; _DEV_HOOK_NUMBER_OF_VERTICES / 3 + 1] = [0, 3, 6, 9];
-const _DEV_VERTEX_SIZE: usize = 3;
-const fn _dev_v2_create_hook_graphics<const N: usize>() -> Vertices<N> {
-    let mut index: usize = 0;
-    VerticesBuilder::<N, 3, 0>::new()
-        .insert::<3>(UNIT_TRIANGLE)
-        .insert::<6>(UNIT_TRIANGLE)
-        // .insert::<9>(UNIT_TRIANGLE, &mut index)
-        .insert(UNIT_TRIANGLE)
-        .build()
-}
-
-/// Position on a circle: P(x = r*cos(theta), y = r*sin(theta))
-fn unit_triangle() -> Vertices<3> {
-    let mut theta = 0.0;
-    let theta_incr = 2.0 * PI / 3.0;
-    let v1 = Vec2::new(f32::cos(theta), f32::sin(theta));
-    theta += theta_incr;
-    let v2 = Vec2::new(f32::cos(theta), f32::sin(theta));
-    theta += theta_incr;
-    let v3 = Vec2::new(f32::cos(theta), f32::sin(theta));
-    Vertices([v1, v2, v3])
 }
 
 pub fn debug_draw_grid() {
@@ -299,7 +271,7 @@ pub fn debug_draw_state_text(states: &[StateEnum]) {
     mq::draw_multiline_text(debug_text.as_str(), 20.0, 20.0, 20.0, None, macroquad::color::RED);
 }
 
-mod sandbox_vertices {
+mod _dev_vertices {
     use std::ops::Deref;
 
     fn example() -> _Triangle {
@@ -356,7 +328,7 @@ mod sandbox_vertices {
     }
 }
 
-mod sandbox_vertices2 {
+mod _dev_vertices2 {
     use typenum::P2;
 
     trait VertexN {
@@ -374,32 +346,5 @@ mod sandbox_vertices2 {
         fn value(&self) -> &[T; N] {
             &self.0
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_unit_triangle_vertices_count() {
-        let triangle = unit_triangle();
-        assert_eq!(triangle.0.len(), 3);
-    }
-
-    #[test]
-    fn test_unit_triangle_on_unit_circle() {
-        let triangle = unit_triangle();
-        for vertex in triangle.0.iter() {
-            let magnitude = (vertex.x * vertex.x + vertex.y * vertex.y).sqrt();
-            assert!((magnitude - 1.0).abs() < 0.0001);
-        }
-    }
-
-    #[test]
-    fn test_hook_graphics() {
-        let hook_graphics: Vertices<HOOK_NUMBER_OF_VERTICES> =
-            create_vertex_graphics(HOOK_GRAPHICS_ARRAY);
-        println!("{:?}", hook_graphics)
     }
 }

@@ -6,8 +6,8 @@
 pub const HOOK_AMOUNT_LINKS: usize = 40;
 pub const HOOK_LINK_LENGTH: f32 = 20.0;
 pub const HOOK_EXTENDING_SPEED: Magnitude = Magnitude::new_const(5.5);
-pub const HOOK_CONTRACTING_SPEED: Magnitude = Magnitude::new_const(2.5);
-// pub const HOOK_CONTRACTING_SPEED: Magnitude = Magnitude::new_const(0.0);
+// pub const HOOK_CONTRACTING_SPEED: Magnitude = Magnitude::new_const(2.5);
+pub const HOOK_CONTRACTING_SPEED: Magnitude = Magnitude::new_const(0.0);
 pub const HOOK_CONTRACTING_HIST_LENGTH: usize = 50;
 pub const HOOK_DIST_END_CONTRACT: f32 = 10.0;
 pub const HOOK_CHAIN_PROJECTION_FACTOR: f32 = 0.1;
@@ -17,23 +17,26 @@ use std::fmt::Display;
 
 use crate::model::*;
 use crate::state::hook::state_hook::*;
+use crate::util::name_of_type;
 
 #[derive(Debug)]
-pub enum HookStateEnum {
+pub enum HookState {
     Extending(HookStateMachine<Extending>),
     Contracting(HookStateMachine<Contracting>),
     End,
 }
-impl Display for HookStateEnum {
+impl Display for HookState {
+
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ", name_of_type(self));
         match self {
-            HookStateEnum::Extending(state) => write!(f, "Hook - {}", state),
-            HookStateEnum::Contracting(state) => write!(f, "{}", state),
-            HookStateEnum::End => write!(f, "Hook - End"),
+            HookState::Extending(state) => write!(f, "{}", state),
+            HookState::Contracting(state) => write!(f, "{}", state),
+            HookState::End => write!(f, "End"),
         }
     }
 }
-impl HookStateEnum {
+impl HookState {
     pub fn new(
         speed: Magnitude,
         direction: Direction,
@@ -47,13 +50,13 @@ impl HookStateEnum {
 
     pub fn invoke(self, spawner_position: Position) -> Self {
         match self {
-            HookStateEnum::Extending(hook_state_machine) => {
+            HookState::Extending(hook_state_machine) => {
                 hook_state_machine.invoke(spawner_position)
             }
-            HookStateEnum::Contracting(hook_state_machine) => {
+            HookState::Contracting(hook_state_machine) => {
                 hook_state_machine.invoke(spawner_position)
             }
-            HookStateEnum::End => self,
+            HookState::End => self,
         }
     }
 }
@@ -65,40 +68,40 @@ impl HookStateEnum {
 //  It would need to always take the position as input. It makes more sense for the wrapper to take this input,
 //  and disregard it if in Expanding state
 #[derive(Debug)]
-pub struct HookStateMachine<T: HookState> {
+pub struct HookStateMachine<T: State> {
     state: T,
 }
 impl<T> HookStateMachine<T>
 where
-    T: HookState,
+    T: State,
 {
     pub fn state(&self) -> &T {
         &self.state
     }
 }
 impl HookStateMachine<Extending> {
-    fn invoke(self, spawner_position: Position) -> HookStateEnum {
+    fn invoke(self, spawner_position: Position) -> HookState {
         let extending = self.state.extend_self();
         match extending.try_contract(spawner_position) {
-            Ok(contracting) => HookStateEnum::Contracting(HookStateMachine { state: contracting }),
-            Err(extending) => HookStateEnum::Extending(HookStateMachine { state: extending }),
+            Ok(contracting) => HookState::Contracting(HookStateMachine { state: contracting }),
+            Err(extending) => HookState::Extending(HookStateMachine { state: extending }),
         }
     }
 }
 impl HookStateMachine<Contracting> {
-    fn invoke(self, spawner_position: Position) -> HookStateEnum {
+    fn invoke(self, spawner_position: Position) -> HookState {
         let contracting = self.state.contract_self(spawner_position);
         match contracting.try_end() {
-            Ok(_) => HookStateEnum::End,
-            Err(contracting) => HookStateEnum::Contracting(HookStateMachine { state: contracting }),
+            Ok(_) => HookState::End,
+            Err(contracting) => HookState::Contracting(HookStateMachine { state: contracting }),
         }
     }
 }
-impl<T> HookState for HookStateMachine<T> where T: HookState {}
+impl<T> State for HookStateMachine<T> where T: State {}
 
 impl<T> Display for HookStateMachine<T>
 where
-    T: HookState,
+    T: State,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.state())
@@ -130,7 +133,7 @@ pub mod state_hook {
         Extending::extend(speed, direction, origin, amount_of_links)
     }
 
-    pub trait HookState: Display {}
+    pub trait State: Display {}
 
     #[derive(Debug)]
     pub struct Extending {
@@ -138,7 +141,7 @@ pub mod state_hook {
         chain: Chain,
         speed: Magnitude,
     }
-    impl HookState for Extending {}
+    impl State for Extending {}
     impl Extending {
         pub fn amount_of_links(&self) -> usize {
             self.amount_of_links
@@ -200,7 +203,7 @@ pub mod state_hook {
         speed: Magnitude,
     }
 
-    impl HookState for Contracting {}
+    impl State for Contracting {}
     impl Contracting {
         pub fn speed(&self) -> Magnitude {
             self.speed

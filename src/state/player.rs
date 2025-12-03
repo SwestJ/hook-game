@@ -1,8 +1,3 @@
-//* ------------------------------------------------------------------------*/
-//* ------------------------------------------------------------------------*/
-//* ---------------------------------PLAYER---------------------------------*/
-//* ------------------------------------------------------------------------*/
-//* ------------------------------------------------------------------------*/
 pub const PLAYER_SPEED: f32 = 2.5;
 
 use std::fmt::Display;
@@ -11,9 +6,12 @@ use either::Either::{Left, Right};
 
 use crate::model::*;
 use crate::state::player::state_player::*;
+use crate::util::*;
+use crate::input::*;
+use crate::state::hook::*;
 
 #[derive(Debug)]
-pub enum PlayerStateEnum {
+pub enum PlayerState {
     Idling(PlayerStateMachine<state_player::Idling>),
     Moving(PlayerStateMachine<state_player::Moving>),
     Shooting(PlayerStateMachine<state_player::Shooting>),
@@ -21,7 +19,7 @@ pub enum PlayerStateEnum {
     DualityMovingShooting(PlayerStateMachine<state_player::Duality<Moving, Shooting>>),
 }
 
-impl PlayerStateEnum {
+impl PlayerState {
     pub fn new(position: Position, direction: Direction) -> Self {
         Self::Idling(PlayerStateMachine {
             state: state_player::build(position, direction),
@@ -30,96 +28,97 @@ impl PlayerStateEnum {
 
     pub fn invoke(self) -> Self {
         match self {
-            PlayerStateEnum::Idling(player_state_machine) => player_state_machine.invoke(),
-            PlayerStateEnum::Moving(player_state_machine) => player_state_machine.invoke(),
-            PlayerStateEnum::Shooting(player_state_machine) => player_state_machine.invoke(),
-            PlayerStateEnum::DualityIdlingShooting(player_state_machine) => {
+            PlayerState::Idling(player_state_machine) => player_state_machine.invoke(),
+            PlayerState::Moving(player_state_machine) => player_state_machine.invoke(),
+            PlayerState::Shooting(player_state_machine) => player_state_machine.invoke(),
+            PlayerState::DualityIdlingShooting(player_state_machine) => {
                 player_state_machine.invoke()
             }
-            PlayerStateEnum::DualityMovingShooting(player_state_machine) => {
+            PlayerState::DualityMovingShooting(player_state_machine) => {
                 player_state_machine.invoke()
             }
         }
     }
 }
-impl Display for PlayerStateEnum {
+impl Display for PlayerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} ", name_of_type(self));
         match self {
-            PlayerStateEnum::Idling(player_state_machine) => write!(f, "{}", player_state_machine),
-            PlayerStateEnum::Moving(player_state_machine) => write!(f, "{}", player_state_machine),
-            PlayerStateEnum::Shooting(player_state_machine) => {
+            PlayerState::Idling(player_state_machine) => write!(f, "{}", player_state_machine),
+            PlayerState::Moving(player_state_machine) => write!(f, "{}", player_state_machine),
+            PlayerState::Shooting(player_state_machine) => {
                 write!(f, "{}", player_state_machine)
             }
-            PlayerStateEnum::DualityIdlingShooting(player_state_machine) => {
+            PlayerState::DualityIdlingShooting(player_state_machine) => {
                 write!(f, "{}", player_state_machine)
             }
-            PlayerStateEnum::DualityMovingShooting(player_state_machine) => {
+            PlayerState::DualityMovingShooting(player_state_machine) => {
                 write!(f, "{}", player_state_machine)
             }
         }
     }
 }
-impl From<Idling> for PlayerStateEnum {
+impl From<Idling> for PlayerState {
     fn from(value: Idling) -> Self {
-        PlayerStateEnum::Idling(PlayerStateMachine { state: value })
+        PlayerState::Idling(PlayerStateMachine { state: value })
     }
 }
-impl From<Shooting> for PlayerStateEnum {
+impl From<Shooting> for PlayerState {
     fn from(value: Shooting) -> Self {
-        PlayerStateEnum::Shooting(PlayerStateMachine { state: value })
+        PlayerState::Shooting(PlayerStateMachine { state: value })
     }
 }
-impl From<Moving> for PlayerStateEnum {
+impl From<Moving> for PlayerState {
     fn from(value: Moving) -> Self {
-        PlayerStateEnum::Moving(PlayerStateMachine { state: value })
+        PlayerState::Moving(PlayerStateMachine { state: value })
     }
 }
-impl From<Duality<Idling, Shooting>> for PlayerStateEnum {
+impl From<Duality<Idling, Shooting>> for PlayerState {
     fn from(value: Duality<Idling, Shooting>) -> Self {
-        PlayerStateEnum::DualityIdlingShooting(PlayerStateMachine { state: value })
+        PlayerState::DualityIdlingShooting(PlayerStateMachine { state: value })
     }
 }
-impl From<Duality<Moving, Shooting>> for PlayerStateEnum {
+impl From<Duality<Moving, Shooting>> for PlayerState {
     fn from(value: Duality<Moving, Shooting>) -> Self {
-        PlayerStateEnum::DualityMovingShooting(PlayerStateMachine { state: value })
+        PlayerState::DualityMovingShooting(PlayerStateMachine { state: value })
     }
 }
 
-pub trait StateMachine<T: PlayerState> {
-    fn invoke(self) -> PlayerStateEnum;
+pub trait StateMachine<T: State> {
+    fn invoke(self) -> PlayerState;
 }
 
 #[derive(Debug)]
-pub struct PlayerStateMachine<T: PlayerState> {
+pub struct PlayerStateMachine<T: State> {
     state: T,
 }
 impl<T> PlayerStateMachine<T>
 where
-    T: PlayerState,
+    T: State,
 {
     pub fn state(&self) -> &T {
         &self.state
     }
 }
 impl PlayerStateMachine<Idling> {
-    fn invoke(self) -> PlayerStateEnum {
+    fn invoke(self) -> PlayerState {
         match self.state.try_move().map_err(|state| state.try_shoot()) {
-            Ok(moving) => PlayerStateEnum::Moving(PlayerStateMachine { state: moving }),
-            Err(Ok(shooting)) => PlayerStateEnum::Shooting(PlayerStateMachine { state: shooting }),
-            Err(Err(idling)) => PlayerStateEnum::Idling(PlayerStateMachine { state: idling }),
+            Ok(moving) => PlayerState::Moving(PlayerStateMachine { state: moving }),
+            Err(Ok(shooting)) => PlayerState::Shooting(PlayerStateMachine { state: shooting }),
+            Err(Err(idling)) => PlayerState::Idling(PlayerStateMachine { state: idling }),
         }
     }
 }
 impl PlayerStateMachine<Moving> {
-    fn invoke(self) -> PlayerStateEnum {
+    fn invoke(self) -> PlayerState {
         match self.state.move_or_idle() {
-            Ok(moving) => PlayerStateEnum::Moving(PlayerStateMachine { state: moving }),
-            Err(idling) => PlayerStateEnum::Idling(PlayerStateMachine { state: idling }),
+            Ok(moving) => PlayerState::Moving(PlayerStateMachine { state: moving }),
+            Err(idling) => PlayerState::Idling(PlayerStateMachine { state: idling }),
         }
     }
 }
 impl PlayerStateMachine<Shooting> {
-    fn invoke(self) -> PlayerStateEnum {
+    fn invoke(self) -> PlayerState {
         let position = self.position();
         match self.state.action_update_hook(position).try_idle() {
             Ok(Left(duality)) => duality.into(),
@@ -129,7 +128,7 @@ impl PlayerStateMachine<Shooting> {
     }
 }
 impl PlayerStateMachine<Duality<Idling, Shooting>> {
-    fn invoke(self) -> PlayerStateEnum {
+    fn invoke(self) -> PlayerState {
         match self
             .state
             .action_update_hook()
@@ -142,7 +141,7 @@ impl PlayerStateMachine<Duality<Idling, Shooting>> {
     }
 }
 impl PlayerStateMachine<Duality<Moving, Shooting>> {
-    fn invoke(self) -> PlayerStateEnum {
+    fn invoke(self) -> PlayerState {
         match self
             .state
             .action_update_hook()
@@ -155,9 +154,9 @@ impl PlayerStateMachine<Duality<Moving, Shooting>> {
     }
 }
 
-impl<T> PlayerState for PlayerStateMachine<T>
+impl<T> State for PlayerStateMachine<T>
 where
-    T: PlayerState,
+    T: State,
 {
     fn position(&self) -> Position {
         self.state().position()
@@ -167,14 +166,14 @@ where
         self.state().direction()
     }
 
-    fn to_enum(self) -> State {
+    fn to_enum(self) -> LocalState {
         todo!()
     }
 }
 
 impl<T> Display for PlayerStateMachine<T>
 where
-    T: PlayerState,
+    T: State,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.state())
@@ -186,18 +185,14 @@ pub mod state_player {
 
     use either::Either::{self, Left, Right};
 
-    use crate::{
-        input::*,
-        model::*,
-        state::{hook::{state_hook::{Extending, HookState}, *}, player::PLAYER_SPEED},
-    };
+    use super::*;
 
     pub fn build(position: Position, direction: Direction) -> Idling {
         Idling::idle(position, direction)
     }
 
     #[derive(Debug)]
-    pub enum State {
+    pub enum LocalState {
         Idling(Idling),
         Moving(Moving),
         Shooting(Shooting),
@@ -205,10 +200,10 @@ pub mod state_player {
         MovingShooting(Moving, Shooting),
     }
 
-    pub trait PlayerState: Display {
+    pub trait State: Display {
         fn position(&self) -> Position;
         fn direction(&self) -> Direction;
-        fn to_enum(self) -> State;
+        fn to_enum(self) -> LocalState;
     }
 
     #[derive(Debug)]
@@ -216,15 +211,15 @@ pub mod state_player {
         position: Position,
         direction: Direction,
     }
-    impl PlayerState for Idling {
+    impl State for Idling {
         fn position(&self) -> Position {
             self.position
         }
         fn direction(&self) -> Direction {
             self.direction
         }
-        fn to_enum(self) -> State {
-            State::Idling(self)
+        fn to_enum(self) -> LocalState {
+            LocalState::Idling(self)
         }
     }
     impl Idling {
@@ -273,7 +268,7 @@ pub mod state_player {
         direction: Direction,
     }
 
-    impl PlayerState for Moving {
+    impl State for Moving {
         fn position(&self) -> Position {
             self.position
         }
@@ -282,8 +277,8 @@ pub mod state_player {
             self.direction
         }
 
-        fn to_enum(self) -> State {
-            State::Moving(self)
+        fn to_enum(self) -> LocalState {
+            LocalState::Moving(self)
         }
     }
     impl Moving {
@@ -327,10 +322,10 @@ pub mod state_player {
         position: Position,
         velocity: Magnitude,
         direction: Direction,
-        hook: HookStateEnum,
+        hook: HookState,
     }
 
-    impl PlayerState for Shooting {
+    impl State for Shooting {
         fn position(&self) -> Position {
             self.position
         }
@@ -339,19 +334,19 @@ pub mod state_player {
             self.direction
         }
 
-        fn to_enum(self) -> State {
-            State::Shooting(self)
+        fn to_enum(self) -> LocalState {
+            LocalState::Shooting(self)
         }
     }
     impl Shooting {
         fn velocity(&self) -> Magnitude {
             self.velocity
         }
-        pub fn hook(&self) -> &HookStateEnum {
+        pub fn hook(&self) -> &HookState {
             &self.hook
         }
         fn shoot(position: Position, direction: Direction, velocity: Magnitude) -> Self {
-            let hook = HookStateEnum::new(velocity, direction, position, HOOK_AMOUNT_LINKS);
+            let hook = HookState::new(velocity, direction, position, HOOK_AMOUNT_LINKS);
             Shooting {
                 position,
                 velocity,
@@ -369,12 +364,12 @@ pub mod state_player {
 
         pub fn try_idle(self) -> Result<Either<Duality<Idling, Self>, Idling>, Self> {
             match self.hook {
-                HookStateEnum::Extending(_) => Err(self),
-                HookStateEnum::Contracting(_) => Ok(Left(Duality {
+                HookState::Extending(_) => Err(self),
+                HookState::Contracting(_) => Ok(Left(Duality {
                     ying: Idling::idle(self.position(), self.direction()),
                     yang: self,
                 })),
-                HookStateEnum::End => Ok(Right(Idling::idle(self.position(), self.direction()))),
+                HookState::End => Ok(Right(Idling::idle(self.position(), self.direction()))),
             }
         }
     }
@@ -382,8 +377,8 @@ pub mod state_player {
     #[derive(Debug)]
     pub struct Duality<A, B>
     where
-        A: PlayerState,
-        B: PlayerState,
+        A: State,
+        B: State,
     {
         ying: A,
         yang: B,
@@ -391,15 +386,15 @@ pub mod state_player {
 
     impl<A> Duality<A, Shooting>
     where
-        A: PlayerState,
+        A: State,
     {
         pub fn action_update_hook(self) -> Either<Self, A> {
             let Duality { ying, yang } = self;
             let yang = yang.action_update_hook(ying.position());
             match yang.hook {
-                HookStateEnum::Extending(_) => Left(Duality { ying, yang }),
-                HookStateEnum::Contracting(_) => Left(Duality { ying, yang }),
-                HookStateEnum::End => Right(ying),
+                HookState::Extending(_) => Left(Duality { ying, yang }),
+                HookState::Contracting(_) => Left(Duality { ying, yang }),
+                HookState::End => Right(ying),
             }
         }
     }
@@ -474,8 +469,8 @@ pub mod state_player {
 
     impl<A, B> Duality<A, B>
     where
-        A: PlayerState,
-        B: PlayerState,
+        A: State,
+        B: State,
     {
         pub fn ying(&self) -> &A {
             &self.ying
@@ -485,10 +480,10 @@ pub mod state_player {
         }
     }
 
-    impl<A, B> PlayerState for Duality<A, B>
+    impl<A, B> State for Duality<A, B>
     where
-        A: PlayerState,
-        B: PlayerState,
+        A: State,
+        B: State,
     {
         fn position(&self) -> Position {
             self.ying.position()
@@ -498,7 +493,7 @@ pub mod state_player {
             self.ying.direction()
         }
 
-        fn to_enum(self) -> State {
+        fn to_enum(self) -> LocalState {
             todo!()
         }
     }
@@ -525,7 +520,7 @@ pub mod state_player {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(
                 f,
-                "{} {} {} \nHook - {}",
+                "{} {} {} \n{}",
                 name_of_type(self),
                 self.position(),
                 self.direction(),
@@ -535,20 +530,16 @@ pub mod state_player {
     }
     impl<A, B> Display for Duality<A, B>
     where
-        A: PlayerState,
-        B: PlayerState,
+        A: State,
+        B: State,
     {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(
                 f,
-                "Duality\n\tYing - {}\n\tYang - {}",
+                "Duality\n\tYing {}\n\tYang {}",
                 self.ying(),
                 self.yang()
             )
         }
-    }
-
-    fn name_of_type<T>(val: &T) -> &'static str {
-        type_name_of_val(val).split("::").last().unwrap()
     }
 }

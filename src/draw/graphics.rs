@@ -1,4 +1,7 @@
-use std::{ops::{Add, Deref, DerefMut}, process::Output};
+use std::{
+    ops::{Add, Deref, DerefMut},
+    process::Output,
+};
 
 use macroquad::{
     color::Color as ColorExt,
@@ -6,6 +9,76 @@ use macroquad::{
 };
 use serde::{Deserialize, Serialize};
 use typenum::P5;
+
+use super::*;
+use crate::model::*;
+use hook_graphics::*;
+use item_graphics::*;
+use player::*;
+
+pub mod hook_graphics;
+pub mod item_graphics;
+pub mod player_graphics;
+
+pub const THETA0: Angle<Radians> = Angle(Radians(0.0));
+pub const THETA1: Angle<Radians> = Angle(Radians(PI / 3.0));
+pub const THETA2: Angle<Radians> = Angle(Radians(2.0 * PI / 3.0));
+pub const THETA3: Angle<Radians> = Angle(Radians(PI));
+pub const THETA4: Angle<Radians> = Angle(Radians(4.0 * PI / 3.0));
+pub const THETA5: Angle<Radians> = Angle(Radians(5.0 * PI / 3.0));
+
+pub const UNIT_CIRCLE_RADIUS: f32 = 1.0;
+pub const UNIT_TRIANGLE_HEIGHT: f32 = 1.5;
+pub const SIN_PI_OVER_3: f32 = 0.866_025_4;
+pub const UNIT_TRIANGLE_SLOPE: f32 = SIN_PI_OVER_3 / UNIT_TRIANGLE_HEIGHT;
+
+pub const COS_THETA0: f32 = 1.0;
+pub const SIN_THETA0: f32 = 0.0;
+pub const COS_THETA1: f32 = 0.5;
+pub const SIN_THETA1: f32 = SIN_PI_OVER_3;
+pub const COS_THETA2: f32 = -0.5;
+pub const SIN_THETA2: f32 = SIN_PI_OVER_3;
+pub const COS_THETA3: f32 = -1.0;
+pub const SIN_THETA3: f32 = 0.0;
+pub const COS_THETA4: f32 = -0.5;
+pub const SIN_THETA4: f32 = -SIN_PI_OVER_3;
+pub const COS_THETA5: f32 = 0.5;
+pub const SIN_THETA5: f32 = -SIN_PI_OVER_3;
+
+/// Position on a circle: P(x = r*cos(theta), y = r*sin(theta))
+pub const THETA0_UNIT: Vec2 = Vec2 { x: COS_THETA0, y: SIN_THETA0 };
+pub const THETA1_UNIT: Vec2 = Vec2 { x: COS_THETA1, y: SIN_THETA1 };
+pub const THETA2_UNIT: Vec2 = Vec2 { x: COS_THETA2, y: SIN_THETA2 };
+pub const THETA3_UNIT: Vec2 = Vec2 { x: COS_THETA3, y: SIN_THETA3 };
+pub const THETA4_UNIT: Vec2 = Vec2 { x: COS_THETA4, y: SIN_THETA4 };
+pub const THETA5_UNIT: Vec2 = Vec2 { x: COS_THETA5, y: SIN_THETA5 };
+
+const fn vertex_y_from_x_a(x: f32, a: f32) -> f32 {
+    UNIT_TRIANGLE_SLOPE * x - a * UNIT_TRIANGLE_SLOPE
+}
+const fn vertex(x: f32, a: f32) -> Vec2 {
+    Vec2 { x, y: vertex_y_from_x_a(x, a) }
+}
+const fn triangle_inner(ix: f32, ia: f32, factor: f32) -> Vertices<3> {
+    let mut h = UNIT_TRIANGLE_HEIGHT;
+    let x = (ix) * h;
+    let a = (ia + ix) * h;
+    h = h * factor;
+    Vertices([vertex(x, a), vertex(x - h, a), vertex(x - h, a - 2.0 * h)])
+}
+const fn triangle(ix: i32, ia: i32) -> Vertices<3> {
+    if (ix + ia) % 2 == 0 {
+        triangle_inner(ix as f32, ia as f32, 1.0)
+    } else {
+        triangle_inner((ix - 1) as f32, ia as f32, -1.0)
+    }
+}
+
+const fn create_vertex_graphics<const N: usize, const M: usize, const O: usize>(
+    array: [Vertices<M>; O],
+) -> Vertices<N> {
+    VerticesBuilder::<N, M, 0>::new().fill(array).build()
+}
 
 pub trait IShape<T: IBuilder<Self>>: Sized {
     fn builder() -> T {
@@ -15,8 +88,11 @@ pub trait IShape<T: IBuilder<Self>>: Sized {
 
 pub trait IBuilder<T: IShape<Self>>: Sized + Default {}
 
-#[derive(Default, Clone, Copy, Debug)]
+#[allow(clippy::large_enum_variant)]
+#[derive(Default, Clone, Debug)]
 pub enum Shape {
+    HookObject(HookGraphics),
+    ItemObject(ItemGraphics),
     Polygon(Polygon),
     Rectangle(Rectangle),
     Triangle(Triangle),
@@ -130,6 +206,14 @@ impl<const N: usize> Vertices<N> {
         }
         self
     }
+    pub const fn scale_const(mut self, factor: f32) -> Self {
+        let mut i = 0;
+        while i < N {
+            self.0[i] = Vec2 { x: self.0[i].x * factor, y: self.0[i].y * factor };
+            i += 1;
+        }
+        self
+    }
     pub fn scale(self, factor: f32) -> Self {
         Self(self.map(|v| v * factor))
     }
@@ -158,17 +242,20 @@ pub struct VerticesBuilder2<const N: usize, const M: usize> {
 }
 
 impl<const N: usize, const M: usize> VerticesBuilder2<N, M> {
-    pub const fn fill<const O: usize>(mut self, from: [Vertices<M>; O]) -> VerticesBuilder<N, M, N> {
+    pub const fn fill<const O: usize>(
+        mut self,
+        from: [Vertices<M>; O],
+    ) -> VerticesBuilder<N, M, N> {
         let mut vertices = Vertices([Vec2::NAN; N]);
         let mut o = 0;
         while o < O {
             let mut m = 0;
             while m < M {
-                vertices.0[m + o*M] = from[o].0[m];
+                vertices.0[m + o * M] = from[o].0[m];
                 m += 1;
             }
             o += 1;
-        };
+        }
         VerticesBuilder { vertices: self.vertices, index: N }
     }
 }
@@ -257,16 +344,19 @@ impl<const N: usize, const M: usize, const I: usize> VerticesBuilder<N, M, I> {
         VerticesBuilder { vertices: self.vertices, index: J }
     }
 
-    pub const fn fill<const O: usize>(mut self, from: [Vertices<M>; O]) -> VerticesBuilder<N, M, N> {
+    pub const fn fill<const O: usize>(
+        mut self,
+        from: [Vertices<M>; O],
+    ) -> VerticesBuilder<N, M, N> {
         let mut o = 0;
         while o < O {
             let mut m = 0;
             while m < M {
-                self.vertices.0[m + o*M] = from[o].0[m];
+                self.vertices.0[m + o * M] = from[o].0[m];
                 m += 1;
             }
             o += 1;
-        };
+        }
         VerticesBuilder { vertices: self.vertices, index: N }
     }
 }

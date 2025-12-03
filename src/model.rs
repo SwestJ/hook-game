@@ -19,68 +19,6 @@ pub const DOWN: Direction = Direction(Vec2::Y);
 pub const LEFT: Direction = Direction(Vec2::NEG_X);
 pub const RIGHT: Direction = Direction(Vec2::X);
 
-pub const THETA0: Angle<Radians> = Angle(Radians(0.0));
-pub const THETA1: Angle<Radians> = Angle(Radians(PI / 3.0));
-pub const THETA2: Angle<Radians> = Angle(Radians(2.0 * PI / 3.0));
-pub const THETA3: Angle<Radians> = Angle(Radians(PI));
-pub const THETA4: Angle<Radians> = Angle(Radians(4.0 * PI / 3.0));
-pub const THETA5: Angle<Radians> = Angle(Radians(5.0 * PI / 3.0));
-
-pub const UNIT_CIRCLE_RADIUS: f32 = 1.0;
-pub const UNIT_TRIANGLE_HEIGHT: f32 = 1.5;
-pub const SIN_PI_OVER_3: f32 = 0.866_025_4;
-pub const UNIT_TRIANGLE_SLOPE: f32 = SIN_PI_OVER_3 / UNIT_TRIANGLE_HEIGHT;
-
-pub const COS_THETA0: f32 = 1.0;
-pub const SIN_THETA0: f32 = 0.0;
-pub const COS_THETA1: f32 = 0.5;
-pub const SIN_THETA1: f32 = SIN_PI_OVER_3;
-pub const COS_THETA2: f32 = -0.5;
-pub const SIN_THETA2: f32 = SIN_PI_OVER_3;
-pub const COS_THETA3: f32 = -1.0;
-pub const SIN_THETA3: f32 = 0.0;
-pub const COS_THETA4: f32 = -0.5;
-pub const SIN_THETA4: f32 = -SIN_PI_OVER_3;
-pub const COS_THETA5: f32 = 0.5;
-pub const SIN_THETA5: f32 = -SIN_PI_OVER_3;
-
-pub const THETA0_UNIT: Vec2 = Vec2 { x: COS_THETA0, y: SIN_THETA0 };
-pub const THETA1_UNIT: Vec2 = Vec2 { x: COS_THETA1, y: SIN_THETA1 };
-pub const THETA2_UNIT: Vec2 = Vec2 { x: COS_THETA2, y: SIN_THETA2 };
-pub const THETA3_UNIT: Vec2 = Vec2 { x: COS_THETA3, y: SIN_THETA3 };
-pub const THETA4_UNIT: Vec2 = Vec2 { x: COS_THETA4, y: SIN_THETA4 };
-pub const THETA5_UNIT: Vec2 = Vec2 { x: COS_THETA5, y: SIN_THETA5 };
-
-pub const THETA0_DIRECTION: Direction = Direction(THETA0_UNIT);
-pub const THETA1_DIRECTION: Direction = Direction(THETA1_UNIT);
-pub const THETA2_DIRECTION: Direction = Direction(THETA2_UNIT);
-pub const THETA3_DIRECTION: Direction = Direction(THETA3_UNIT);
-pub const THETA4_DIRECTION: Direction = Direction(THETA4_UNIT);
-pub const THETA5_DIRECTION: Direction = Direction(THETA5_UNIT);
-
-pub const UNIT_TRIANGLE: Vertices<3> = vertices(0, 0);
-
-const fn vertex_y_from_x_a(x: f32, a: f32) -> f32 {
-    UNIT_TRIANGLE_SLOPE * x - a * UNIT_TRIANGLE_SLOPE
-}
-const fn vertex(x: f32, a: f32) -> Vec2 {
-    Vec2 { x, y: vertex_y_from_x_a(x, a) }
-}
-const fn vertices_inner(ix: f32, ia: f32, factor: f32) -> Vertices<3> {
-    let mut h = UNIT_TRIANGLE_HEIGHT;
-    let x = (ix) * h;
-    let a = (ia + ix) * h;
-    h = h * factor;
-    Vertices([vertex(x, a), vertex(x - h, a), vertex(x - h, a - 2.0 * h)])
-}
-pub const fn vertices(ix: i32, ia: i32) -> Vertices<3> {
-    if (ix + ia) % 2 == 0 {
-        vertices_inner(ix as f32, ia as f32, 1.0)
-    } else {
-        vertices_inner((ix - 1) as f32, ia as f32, -1.0)
-    }
-}
-
 pub trait Object: Sized + core::fmt::Debug + Copy + Display {
     fn position(&self) -> Position;
     fn set_position(&mut self, position: &Position);
