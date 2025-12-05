@@ -1,93 +1,70 @@
-use std::fmt::Display;
+use std::{fmt::Display, vec};
 
-use macroquad::prelude::*;
-
-use crate::{model::*, util::name_of_type};
+use crate::{
+    draw::{
+        Draw, Drawable,
+        graphics::{Shape, item_graphics::ITEM_GRAPHICS},
+    },
+    state::{
+        StateMachine,
+        state_machine::{
+            State,
+            item::{Hooked, ItemState, Moving},
+        },
+    },
+    util::name_of_type,
+};
 
 #[derive(Debug)]
-pub enum ItemState {
+pub enum ItemStateMachine {
     Moving(Moving),
-    Hooked(Hooked)
+    Hooked(Hooked),
 }
 
-impl ItemState {
-    pub fn update(self) -> Self {
-        match self {
-            ItemState::Moving(moving) => moving.update(),
-            ItemState::Hooked(hooked) => todo!(),
+impl From<ItemState> for ItemStateMachine {
+    fn from(value: ItemState) -> Self {
+        match value {
+            ItemState::Moving(moving) => ItemStateMachine::Moving(moving),
+            ItemState::Hooked(hooked) => ItemStateMachine::Hooked(hooked),
         }
     }
 }
-impl Display for ItemState {
+impl StateMachine for ItemStateMachine {
+    fn state_object(&self) -> Vec<super::StateObject> {
+        match self {
+            ItemStateMachine::Moving(moving) => vec![moving.into()],
+            ItemStateMachine::Hooked(hooked) => vec![hooked.into()],
+        }
+    }
+
+    fn update(self) -> Self {
+        match self {
+            ItemStateMachine::Moving(moving) => moving.update().into(),
+            ItemStateMachine::Hooked(hooked) => todo!(),
+        }
+    }
+}
+impl Draw for ItemStateMachine {
+    fn drawable(&self) -> Vec<Drawable> {
+        match self {
+            ItemStateMachine::Moving(moving) => vec![Drawable {
+                state: moving.into(),
+                shape: Shape::ItemObject(ITEM_GRAPHICS),
+            }],
+
+            ItemStateMachine::Hooked(hooked) => vec![Drawable {
+                state: hooked.into(),
+                shape: Shape::ItemObject(ITEM_GRAPHICS),
+            }],
+        }
+    }
+}
+impl Display for ItemStateMachine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} ", name_of_type(self));
         match self {
-            ItemState::Moving(moving) => write!(f, "{}", moving),
-            ItemState::Hooked(hooked) => write!(f, "{}", hooked),
+            ItemStateMachine::Moving(moving) => write!(f, "{}", moving),
+            ItemStateMachine::Hooked(hooked) => write!(f, "{}", hooked),
         }
-
     }
-}
-
-pub fn build(position: Position, direction: Direction, speed: Magnitude) -> Moving {
-    Moving::action(position, direction, speed)
-}
-
-pub trait State {}
-
-#[derive(Debug)]
-pub struct Moving {
-    position: Position,
-    direction: Direction,
-    speed: Magnitude,
-}
-impl Display for Moving {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {} {} {}", name_of_type(self), self.position, self.direction, self.speed)
-    }
-}
-impl State for Moving {}
-impl Moving {
-    pub fn position(&self) -> Position {
-        self.position
-    }
-    pub fn direction(&self) -> Direction {
-        self.direction
-    }
-    pub fn speed(&self) -> Magnitude {
-        self.speed
-    }
-    pub fn update(self) -> ItemState {
-        let Self { position, direction, speed } = self;
-        ItemState::Moving(Moving::action(position, direction, speed))
-    }
-    fn action(position: Position, direction: Direction, speed: Magnitude) -> Self {
-        let new_direction = direction.rotate(Angle(Degrees(0.5)));
-        let new_position = Physics::calculate_new_position_from_speed(position, speed, new_direction);
-        Moving {position: new_position, direction: new_direction, speed}
-    }
-}
-
-#[derive(Debug)]
-pub struct Hooked {
-    position: Position,
-}
-impl Display for Hooked {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", name_of_type(self), self.position)
-    }
-}
-impl Hooked {
-    fn hook(position: Position) -> Self {
-        Hooked { position }
-    }
-}
-
-//Something like:
-struct Item {
-    type_of_item: String,
-    points_worth: String,
-    coins_worth: String,
-    buff: String,
-    debuff: String,
 }

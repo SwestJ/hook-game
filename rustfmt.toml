@@ -1,2 +1,2 @@
-use_small_heuristics = "Max"
-max_width = 100 #100 is default
+use_small_heuristics = "Default"
+max_width = 120 #100 is default

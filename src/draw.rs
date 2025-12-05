@@ -9,12 +9,11 @@ use typenum::*;
 
 use crate::DEBUG_DRAW_ORIGIN_FACTOR;
 use crate::model::*;
-use crate::state::StateEnum;
-use crate::state::item::ItemState;
+use crate::state::StateMachine;
+use crate::state::StateMachineEnum;
+use crate::state::StateObject;
 use crate::state::player;
-use crate::state::player::state_player::*;
 use crate::state::hook;
-use crate::state::hook::state_hook::*;
 use crate::state::item::*;
 use colors::*;
 use graphics::*;
@@ -26,163 +25,140 @@ use player::*;
 pub mod colors;
 pub mod graphics;
 
-pub const PLAYER_IDLING: Circle = Circle { radius: Radius(10.0), color: BLUE };
-pub const PLAYER_MOVING: Circle = Circle { radius: Radius(9.0), color: BLUE };
-pub const PLAYER_SHOOTING: Circle = Circle { radius: Radius(10.0), color: BLUE };
-pub const HOOK_EXTENDING: Triangle = Triangle { height: 40.0, base: 20.0, color: PURPLE };
-pub const HOOK_CONTRACTING: Triangle = Triangle { height: 40.0, base: 20.0, color: PURPLE };
-pub const HOOK_LINK: Line = Line { length: 5.0, thickness: 5.0, color: DARKGRAY };
-pub const HOOK_LINK_VERTEX: Circle = Circle { radius: Radius(5.0), color: GRAY };
-
 //* Drawing */
-pub fn draw_states(states: &[StateEnum]) {
+pub fn draw_states(states: &[StateMachineEnum]) {
     let origin = Position::from_vec(Vec2::new(mq::screen_width() / 2.0, mq::screen_height() / 2.0));
     // draw_hook_graphics(origin, RIGHT);
-    let drawables: Vec<Drawable> = states.iter().flat_map(Vec::<Drawable>::from).collect();
+    // let drawables: Vec<Drawable> = states.iter().flat_map(Vec::<Drawable>::from).collect();
+    let drawables: Vec<Drawable> = states.iter().flat_map(StateMachineEnum::drawable).collect();
     drawables.into_iter().for_each(draw_drawable);
 }
 
-struct Drawable {
-    position: Position,
-    direction: Direction,
-    shape: Shape,
+pub struct Drawable {
+    pub state: StateObject,
+    pub shape: Shape,
 }
 
-impl From<&StateEnum> for Vec<Drawable> {
-    fn from(state: &StateEnum) -> Self {
-        match state {
-            StateEnum::Player(player_state_enum) => player_state_enum.into(),
-            StateEnum::Item(item_state_enum) => item_state_enum.into(),
-            StateEnum::Default => todo!(),
-        }
-    }
+pub trait Draw: StateMachine {
+    fn drawable(&self) -> Vec<Drawable>;
 }
 
-impl From<&ItemState> for Vec<Drawable> {
-    fn from(value: &ItemState) -> Self {
-        match value {
-            ItemState::Moving(state) => {
-                vec![Drawable {
-                    position: state.position(),
-                    direction: state.direction(),
-                    shape: Shape::ItemObject(ITEM_GRAPHICS),
-                }]
-            }
-            ItemState::Hooked(hooked) => todo!(),
-        }
-    }
-}
+        // match value {
+        //     ItemState::Moving(state) => {
+        //         vec![Drawable {
+        //             position: state.position(),
+        //             direction: state.direction(),
+        //             shape: Shape::ItemObject(ITEM_GRAPHICS),
+        //         }]
+        //     }
+        //     ItemState::Hooked(hooked) => todo!(),
+        // }
 
-impl From<&PlayerState> for Vec<Drawable> {
-    fn from(value: &PlayerState) -> Self {
-        match value {
-            PlayerState::Idling(state) => {
-                vec![Drawable {
-                    position: state.position(),
-                    direction: state.direction(),
-                    shape: PLAYER_IDLING.into(),
-                }]
-            }
-            PlayerState::Moving(state) => {
-                vec![Drawable {
-                    position: state.position(),
-                    direction: state.direction(),
-                    shape: PLAYER_MOVING.into(),
-                }]
-            }
-            PlayerState::Shooting(state) => {
-                state.state().hook();
-                let mut vec = vec![Drawable {
-                    position: state.position(),
-                    direction: state.direction(),
-                    shape: PLAYER_SHOOTING.into(),
-                }];
-                vec.append(&mut Vec::<Drawable>::from(state.state().hook()));
-                vec
-            }
-            PlayerState::DualityIdlingShooting(state) => {
-                let mut vec = vec![Drawable {
-                    position: state.position(),
-                    direction: state.direction(),
-                    shape: PLAYER_IDLING.into(),
-                }];
-                vec.append(&mut Vec::<Drawable>::from(state.state().yang().hook()));
-                vec
-            }
-            PlayerState::DualityMovingShooting(state) => {
-                let mut vec = vec![Drawable {
-                    position: state.position(),
-                    direction: state.direction(),
-                    shape: PLAYER_MOVING.into(),
-                }];
-                vec.append(&mut Vec::<Drawable>::from(state.state().yang().hook()));
-                vec
-            }
-        }
-    }
-}
 
-impl From<&HookState> for Vec<Drawable> {
-    fn from(state: &HookState) -> Self {
-        match state {
-            HookState::Extending(hook_state_machine) => {
-                let mut vec = vec![Drawable {
-                    position: hook_state_machine.state().chain().head().position(),
-                    direction: hook_state_machine.state().chain().head_direction(),
-                    shape: Shape::HookObject(HOOK_GRAPHICS),
-                }];
-                vec.append(&mut Vec::<Drawable>::from(hook_state_machine.state().chain()));
-                vec
-            }
-            HookState::Contracting(hook_state_machine) => {
-                let mut vec = vec![Drawable {
-                    position: hook_state_machine.state().chain().head().position(),
-                    direction: hook_state_machine.state().chain().head_direction(),
-                    shape: Shape::HookObject(HOOK_GRAPHICS),
-                }];
-                vec.append(&mut Vec::<Drawable>::from(hook_state_machine.state().chain()));
-                vec
-            }
-            HookState::End => {
-                vec![]
-            }
-        }
-    }
-}
+        // match value {
+        //     PlayerState::Idling(state) => {
+        //         vec![Drawable {
+        //             position: state.position(),
+        //             direction: state.direction(),
+        //             shape: PLAYER_IDLING.into(),
+        //         }]
+        //     }
+        //     PlayerState::Moving(state) => {
+        //         vec![Drawable {
+        //             position: state.position(),
+        //             direction: state.direction(),
+        //             shape: PLAYER_MOVING.into(),
+        //         }]
+        //     }
+        //     PlayerState::Shooting(state) => {
+        //         state.state().hook();
+        //         let mut vec = vec![Drawable {
+        //             position: state.position(),
+        //             direction: state.direction(),
+        //             shape: PLAYER_SHOOTING.into(),
+        //         }];
+        //         vec.append(&mut Vec::<Drawable>::from(state.state().hook()));
+        //         vec
+        //     }
+        //     PlayerState::DualityIdlingShooting(state) => {
+        //         let mut vec = vec![Drawable {
+        //             position: state.position(),
+        //             direction: state.direction(),
+        //             shape: PLAYER_IDLING.into(),
+        //         }];
+        //         vec.append(&mut Vec::<Drawable>::from(state.state().yang().hook()));
+        //         vec
+        //     }
+        //     PlayerState::DualityMovingShooting(state) => {
+        //         let mut vec = vec![Drawable {
+        //             position: state.position(),
+        //             direction: state.direction(),
+        //             shape: PLAYER_MOVING.into(),
+        //         }];
+        //         vec.append(&mut Vec::<Drawable>::from(state.state().yang().hook()));
+        //         vec
+        //     }
+        // }
 
-impl From<&Chain> for Vec<Drawable> {
-    fn from(chain: &Chain) -> Self {
-        hook_chain_as_drawables(chain)
-    }
-}
 
-fn hook_chain_as_drawables(chain: &Chain) -> Vec<Drawable> {
-    let mut drawables: Vec<Drawable> = vec![];
-    let mut link_shape = HOOK_LINK;
-    let mut it = chain.chain().iter_full();
-    let it_clone = it.clone();
-    let mut prev = it.next().unwrap();
-    for link in it_clone.skip(1) {
-        link_shape.length = link.distance(prev);
-        drawables.push(Drawable {
-            position: link.position(),
-            direction: link.direction(prev),
-            shape: link_shape.into(),
-        });
-        prev = link;
-    }
+        // match state {
+        //     HookState::Extending(hook_state_machine) => {
+        //         let mut vec = vec![Drawable {
+        //             position: hook_state_machine.state().chain().head().position(),
+        //             direction: hook_state_machine.state().chain().head_direction(),
+        //             shape: Shape::HookObject(HOOK_GRAPHICS),
+        //         }];
+        //         vec.append(&mut Vec::<Drawable>::from(hook_state_machine.state().chain()));
+        //         vec
+        //     }
+        //     HookState::Contracting(hook_state_machine) => {
+        //         let mut vec = vec![Drawable {
+        //             position: hook_state_machine.state().chain().head().position(),
+        //             direction: hook_state_machine.state().chain().head_direction(),
+        //             shape: Shape::HookObject(HOOK_GRAPHICS),
+        //         }];
+        //         vec.append(&mut Vec::<Drawable>::from(hook_state_machine.state().chain()));
+        //         vec
+        //     }
+        //     HookState::End => {
+        //         vec![]
+        //     }
+        // }
 
-    for link in it {
-        drawables.push(Drawable {
-            position: link.position(),
-            direction: Direction::default(),
-            shape: HOOK_LINK_VERTEX.into(),
-        });
-    }
-    drawables
-}
+// impl From<&Chain> for Vec<Drawable> {
+//     fn from(chain: &Chain) -> Self {
+//         hook_chain_as_drawables(chain)
+//     }
+// }
 
-fn draw_drawable(Drawable { position, direction, shape }: Drawable) {
+// fn hook_chain_as_drawables(chain: &Chain) -> Vec<Drawable> {
+//     let mut drawables: Vec<Drawable> = vec![];
+//     let mut link_shape = HOOK_LINK;
+//     let mut it = chain.chain().iter_full();
+//     let it_clone = it.clone();
+//     let mut prev = it.next().unwrap();
+//     for link in it_clone.skip(1) {
+//         link_shape.length = link.distance(prev);
+//         drawables.push(Drawable {
+//             position: link.position(),
+//             direction: link.direction(prev),
+//             shape: link_shape.into(),
+//         });
+//         prev = link;
+//     }
+
+//     for link in it {
+//         drawables.push(Drawable {
+//             position: link.position(),
+//             direction: Direction::default(),
+//             shape: HOOK_LINK_VERTEX.into(),
+//         });
+//     }
+//     drawables
+// }
+
+fn draw_drawable(Drawable { state, shape }: Drawable) {
+    let StateObject { position, direction } = state;
     match shape {
         Shape::Rectangle(rectangle) => draw_rectangle(rectangle, position, direction),
         Shape::Circle(s) => draw_circle(s, position),
@@ -265,7 +241,7 @@ pub fn debug_draw_grid() {
     );
 }
 
-pub fn debug_draw_state_text(states: &[StateEnum]) {
+pub fn debug_draw_state_text(states: &[StateMachineEnum]) {
     mq::draw_fps();
     let debug_text = states.iter().fold(String::new(), |acc, s| format!("{}\n{}", acc, s));
     mq::draw_multiline_text(debug_text.as_str(), 20.0, 20.0, 20.0, None, macroquad::color::RED);

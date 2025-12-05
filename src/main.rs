@@ -6,8 +6,12 @@ use std::time::Duration;
 use crate::colors::*;
 use crate::draw::*;
 use crate::model::*;
-use crate::state::StateEnum;
-use crate::state::player::PlayerState;
+use crate::state::StateMachineEnum;
+use crate::state::player::PLAYER_SPEED;
+use crate::state::player::PlayerStateMachine;
+use crate::state::item::*;
+use crate::state::state_machine::item::ItemState;
+use crate::state::state_machine::item::build;
 use macroquad::math::Vec2;
 use macroquad::prelude as mq;
 use macroquad::window::screen_height;
@@ -19,6 +23,7 @@ mod model;
 mod persistence;
 mod state;
 mod util;
+mod collision;
 
 const DRAW_SCREEN_WIDTH: f32 = 1200.0;
 const DRAW_SCREEN_HEIGHT: f32 = 800.0;
@@ -52,26 +57,18 @@ async fn main() {
     }
 }
 
-fn init_player() -> StateEnum {
-    StateEnum::Player(PlayerState::new(Position::new(200.0, 200.0), RIGHT))
+fn init_player() -> StateMachineEnum {
+    StateMachineEnum::Player(PlayerStateMachine::new(Position::new(200.0, 200.0), RIGHT, PLAYER_SPEED))
 }
 
-fn init_item() -> StateEnum {
-    StateEnum::Item(state::item::ItemState::Moving(state::item::build(Position::new(200.0, 200.0), RIGHT, Magnitude::new_const(1.0))))
+fn init_item() -> StateMachineEnum {
+    StateMachineEnum::Item(ItemStateMachine::Moving(build(Position::new(200.0, 200.0), RIGHT, Magnitude::new(1.0))))
 }
 
-fn invoke_states(states: &mut [StateEnum]) {
+fn invoke_states(states: &mut [StateMachineEnum]) {
     for state in states.iter_mut() {
         let s1 = std::mem::take(state);
-        let s2 = s1.invoke();
+        let s2 = s1.update();
         *state = s2;
-    }
-}
-
-pub fn check_collisions(state: &StateEnum) {
-    match state {
-        StateEnum::Player(player_state_enum) => todo!(),
-        StateEnum::Item(_) => todo!(),
-        StateEnum::Default => todo!(),
     }
 }

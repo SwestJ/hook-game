@@ -7,6 +7,7 @@ edition = "2024"
 anyhow = "1.0.100"
 derive_more = { version = "2.0.1", features = ["add", "mul"] }
 either = "1.15.0"
+enum_dispatch = "0.3.13"
 getset = "0.1.6"
 iter_num_tools = "0.7.1"
 macroquad = "0.4.14"
