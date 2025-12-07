@@ -311,6 +311,9 @@ impl Magnitude {
     pub const fn new(v: f32) -> Magnitude {
         Magnitude(v)
     }
+    pub const fn zero() -> Magnitude {
+        Magnitude(0.0)
+    }
     pub fn value(&self) -> f32 {
         self.0
     }

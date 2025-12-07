@@ -1,6 +1,6 @@
 use std::slice;
 
-use crate::util::Stack;
+use crate::{state::state_machine::hook::action::execute_actions, util::Stack};
 
 use super::*;
 
@@ -37,6 +37,34 @@ impl State for HookState {
     }
 }
 
+const EXTENDING_ACTIONS: [action::Action; 2] = [action::Action::Extend, action::Action::StartContract];
+#[derive(Debug)]
+pub struct Extending {
+    max_amount_links: usize,
+    chain: Chain,
+    extend_speed: Magnitude,
+}
+impl Extending {
+    pub fn max_links(&self) -> usize {
+        self.max_amount_links
+    }
+    pub fn extend_speed(&self) -> Magnitude {
+        self.extend_speed
+    }
+
+    pub fn chain(&self) -> &Chain {
+        &self.chain
+    }
+
+    fn extend(speed: Magnitude, direction: Direction, origin: Position, max_amount_links: usize) -> Self {
+        let hook = Hook::new(origin, direction);
+        Extending {
+            max_amount_links,
+            chain: Chain::new(hook, origin, HOOK_LINK_LENGTH),
+            extend_speed: speed,
+        }
+    }
+}
 impl State for Extending {
     type Output = HookState;
     fn position(&self) -> Position {
@@ -48,100 +76,80 @@ impl State for Extending {
     }
 
     fn update(self) -> HookState {
-        todo!()
+        execute_actions(EXTENDING_ACTIONS.into(), self.into())
+    }
+}
+impl action::Extend for Extending {
+    fn chain(self) -> Chain {
+        self.chain
+    }
+
+    fn extend_speed(&self) -> Magnitude {
+        self.extend_speed
+    }
+
+    fn max_amount_links(&self) -> usize {
+        self.max_amount_links
+    }
+
+    fn into_state(chain: Chain, max_amount_links: usize, extend_speed: Magnitude) -> Self {
+        Extending { max_amount_links, chain, extend_speed }
+    }
+}
+impl action::StartContract for Extending {
+    fn max_amount_links(&self) -> usize {
+        self.max_amount_links
+    }
+
+    fn amount_links(&self) -> usize {
+        self.chain.count()
+    }
+
+    fn into_state(self) -> Contracting {
+        Contracting { chain: self.chain, contract_speed: HOOK_CONTRACTING_SPEED }
     }
 }
 
-#[derive(Debug)]
-pub struct Extending {
-    amount_of_links: usize,
-    chain: Chain,
-    speed: Magnitude,
-}
-impl Extending {
-    pub fn amount_of_links(&self) -> usize {
-        self.amount_of_links
-    }
-    pub fn speed(&self) -> Magnitude {
-        self.speed
-    }
-
-    pub fn chain(&self) -> &Chain {
-        &self.chain
-    }
-
-    fn extend(speed: Magnitude, direction: Direction, origin: Position, amount_of_links: usize) -> Self {
-        let hook = Hook::new(origin, direction);
-        let state = Extending {
-            amount_of_links,
-            chain: Chain::new(hook, origin, HOOK_LINK_LENGTH),
-            speed,
-        };
-        state.extend_self()
-    }
-
-    pub fn extend_self(self) -> Self {
-        let position = self.calculate_new_head_position();
-        let chain = self
-            .chain
-            .update_head_position(position)
-            .move_links_toward_head()
-            .maybe_add_link();
-        Extending { chain, ..self }
-    }
-
-    fn contract(self) -> Contracting {
-        Contracting::contract(self.chain, HOOK_CONTRACTING_SPEED)
-    }
-
-    pub fn try_contract(self, goal: Position) -> Result<Contracting, Self> {
-        if self.chain().count() < self.amount_of_links() {
-            Err(self)
-        } else {
-            Ok(self.contract())
-        }
-    }
-
-    fn calculate_new_head_position(&self) -> Position {
-        Physics::calculate_new_position_from_speed(
-            self.chain.head().position(),
-            self.speed,
-            self.chain.head().direction(),
-        )
-    }
-}
-
+const CONTRACTING_ACTIONS: [action::Action; 0] = [];
 #[derive(Debug)]
 pub struct Contracting {
     chain: Chain,
-    speed: Magnitude,
+    contract_speed: Magnitude,
 }
 
 impl Contracting {
-    pub fn speed(&self) -> Magnitude {
-        self.speed
+    pub fn contract_speed(&self) -> Magnitude {
+        self.contract_speed
     }
     pub fn chain(&self) -> &Chain {
         &self.chain
     }
+    pub fn into_chain(self) -> Chain {
+        self.chain
+    }
     fn contract(mut chain: Chain, speed: Magnitude) -> Self {
         let position = chain.tail().position();
-        let state = Contracting { chain, speed };
-        state.contract_self(position)
+        Contracting { chain, contract_speed: speed }
     }
 
     pub fn contract_self(self, tail_position: Position) -> Contracting {
-        let Self { chain, speed } = self;
+        let Self { chain, contract_speed: speed } = self;
         let distance = distance(chain.tail(), &tail_position);
         let chain = chain
             .update_tail_position(tail_position)
             .move_links_toward_tail(Magnitude::from(distance) + speed)
             .maybe_remove_link();
-        Contracting { chain, speed }
+        Contracting { chain, contract_speed: speed }
     }
 
-    pub fn try_end(self) -> Result<(), Self> {
-        if self.chain().is_empty() { Ok(()) } else { Err(self) }
+    pub fn update_tail_position(self, tail_position: Position) -> Contracting {
+        let Self { chain, contract_speed: speed } = self;
+        let distance = distance(chain.tail(), &tail_position);
+        let chain = chain
+            .update_tail_position(tail_position)
+            .move_links_toward_tail(Magnitude::from(distance))
+            .maybe_remove_link();
+        Contracting { chain, contract_speed: speed }
     }
 }
 impl State for Contracting {
@@ -155,7 +163,18 @@ impl State for Contracting {
     }
 
     fn update(self) -> Self::Output {
-        todo!()
+        execute_actions(CONTRACTING_ACTIONS.into(), self.into())
+    }
+}
+impl action::Contract for Contracting {
+    fn chain(self) -> Chain {
+        self.chain
+    }
+    fn contract_speed(&self) -> Magnitude {
+        self.contract_speed
+    }
+    fn into_state(chain: Chain, contract_speed: Magnitude) -> Self {
+        Contracting { chain, contract_speed }
     }
 }
 
@@ -506,7 +525,7 @@ impl Display for Extending {
             f,
             "Extending {}, {}, links: {}, length: {}",
             self.chain.head().position(),
-            self.speed(),
+            self.extend_speed(),
             self.chain().chain.len(),
             self.chain().length_of_links()
         )
@@ -518,7 +537,7 @@ impl Display for Contracting {
             f,
             "Contracting {}, {}, {}, links: {}, length: {}",
             self.chain.head().position(),
-            self.speed(),
+            self.contract_speed(),
             self.chain.head_direction(),
             self.chain().chain.len(),
             self.chain().length_of_links()
@@ -526,58 +545,113 @@ impl Display for Contracting {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+impl From<Extending> for HookState {
+    fn from(value: Extending) -> Self {
+        HookState::Extending(value)
+    }
+}
+impl From<Contracting> for HookState {
+    fn from(value: Contracting) -> Self {
+        HookState::Contracting(value)
+    }
+}
+impl<T, U> From<Result<T, U>> for HookState
+where
+    T: State + Into<HookState>,
+    U: State + Into<HookState>,
+{
+    fn from(value: Result<T, U>) -> Self {
+        value.map_or_else(|s| s.into(), |s| s.into())
+    }
+}
 
-//     #[test]
-//     fn test_move_chain_empty() {
-//         let vec = vec![];
-//         let vec_moved = move_chain_inner(vec, 1.0);
+pub(super) mod action {
+    use super::*;
 
-//         let expect = vec![];
-//         assert_eq!(vec_moved, VecDeque::from(expect));
-//     }
+    pub enum Action {
+        Extend,
+        StartContract,
+    }
 
-//     #[test]
-//     fn test_move_chain_one_item() {
-//         let vec = vec![Position::new(1.0, 1.0)];
-//         let vec_moved = move_chain_inner(vec, 1.0);
+    pub fn execute_actions(actions: Vec<Action>, executor: HookState) -> HookState {
+        let mut state = executor;
+        for action in actions {
+            state = match action {
+                Action::Extend => try_extend(state),
+                Action::StartContract => try_start_contract(state),
+            };
+        }
+        state
+    }
 
-//         let expect = vec![Position::new(1.0, 1.0)];
-//         assert_eq!(vec_moved, VecDeque::from(expect));
-//     }
+    pub trait Extend: State {
+        fn chain(self) -> Chain;
+        fn extend_speed(&self) -> Magnitude;
+        fn max_amount_links(&self) -> usize;
+        fn into_state(chain: Chain, max_amount_links: usize, extend_speed: Magnitude) -> Self;
+    }
+    pub fn try_extend(state: HookState) -> HookState {
+        match state {
+            HookState::Extending(state) => extend(state).into(),
+            _ => state,
+        }
+    }
+    pub fn extend<T: Extend>(state: T) -> T {
+        let max_amount_links = state.max_amount_links();
+        let extend_speed = state.extend_speed();
+        let chain = state.chain();
+        let position = calculate_new_head_position(&chain, extend_speed);
+        let chain = chain
+            .update_head_position(position)
+            .move_links_toward_head()
+            .maybe_add_link();
+        Extend::into_state(chain, max_amount_links, extend_speed)
+    }
 
-//     #[test]
-//     fn test_move_chain_three_items() {
-//         let vec: Vec<Position> = vec![
-//             (1, 0).into(),(0, 0).into(), (0, 1).into()
-//             ];
-//         let vec_moved = move_chain_inner(vec, 1.0);
+    pub trait Contract: State {
+        fn chain(self) -> Chain;
+        fn contract_speed(&self) -> Magnitude;
+        fn into_state(chain: Chain, contract_speed: Magnitude) -> Self;
+    }
+    pub fn contract<T: Contract>(state: T) -> Option<T> {
+        let speed = state.contract_speed();
+        let chain = state.chain();
+        let chain = chain
+            .move_links_toward_tail(speed)
+            .maybe_remove_link();
+        if chain.is_empty() {
+            None
+        } else {
+            Some(Contract::into_state(chain, speed))
+        }
+    }
 
-//         let mut expect: Vec<Position> = vec![
-//             (1, 0).into(),(0.5, 0.5).into(), (0, 1).into()
-//             ];
-//         expect.reverse();
-//         assert_eq!(vec_moved, VecDeque::from(expect));
-//     }
+    pub trait StartContract: State {
+        fn max_amount_links(&self) -> usize;
+        fn amount_links(&self) -> usize;
+        fn into_state(self) -> Contracting;
+    }
+    pub fn try_start_contract(state: HookState) -> HookState {
+        match state {
+            HookState::Extending(extending) => start_contract(extending).into(),
+            _ => state,
+        }
+    }
+    pub fn start_contract<T: StartContract>(state: T) -> Result<Contracting, T> {
+        let max_amount_links = state.max_amount_links();
+        let amount_links = state.amount_links();
+        if amount_links < max_amount_links {
+            Err(state)
+        } else {
+            Ok(state.into_state())
+        }
+    }
 
-//     #[test]
-//     fn test_move_chain_multiple_items() {
-//         let vec: Vec<Position> = vec![
-//             (2, 0).into(),(0, 0).into(), (0, 2).into(),
-//             (0, 4).into(),(0, 6).into(), (0, 8).into()
-//             ];
-//         let vec_moved = move_chain_inner(vec.clone(), 1.0);
-
-//         let expect_0 = vec.first().unwrap().clone();
-//         let expect_1 = project_c_onto_ab(expect_0, vec[2], vec[1], 1.0);
-//         let expect_2 = project_c_onto_ab(expect_1, vec[3], vec[2], 1.0);
-//         let expect_3 = project_c_onto_ab(expect_2, vec[4], vec[3], 1.0);
-//         let expect_4 = project_c_onto_ab(expect_3, vec[5], vec[4], 1.0);
-//         let expect_5 = vec.last().unwrap().clone();
-//         let mut expect = vec![expect_0, expect_1, expect_2, expect_3, expect_4, expect_5];
-//         expect.reverse();
-//         assert_eq!(vec_moved, VecDeque::from(expect));
-//     }
-// }
+    fn calculate_new_head_position(chain: &Chain, speed: Magnitude) -> Position {
+        Physics::calculate_new_position_from_speed(
+            chain.head().position(),
+            speed,
+            chain.head().direction(),
+        )
+    }
+}

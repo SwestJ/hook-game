@@ -41,11 +41,12 @@ pub enum Relation {
 
 const IDLING_ACTIONS: [Action; 2] = [Action::Run, Action::Shoot];
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Idling {
     position: Position,
     direction: Direction,
-    speed: Magnitude,
+    max_speed: Magnitude,
+    current_speed: Magnitude,
     // actions: Vec<IdlingAction>
 }
 impl State for Idling {
@@ -65,7 +66,8 @@ impl Idling {
         Idling {
             position,
             direction,
-            speed,
+            max_speed: speed,
+            ..Default::default()
         }
     }
     // fn _update(self) -> PlayerState {
@@ -76,12 +78,25 @@ impl Idling {
     // }
 }
 impl Run for Idling {
-    fn speed(&self) -> Magnitude {
-        self.speed
+    fn max_speed(&self) -> Magnitude {
+        self.max_speed
+    }
+
+    fn into_ok_state(self, position: Position, direction: Direction, current_speed: Magnitude) -> Self {
+        Self {
+            position,
+            direction,
+            current_speed,
+            ..self
+        }
+    }
+
+    fn into_err_state(self, current_speed: Magnitude) -> Self {
+        Self { current_speed, ..self }
     }
 }
 impl Shoot for Idling {
-    fn hook_speed(&self) -> Magnitude {
+    fn extend_speed(&self) -> Magnitude {
         HOOK_EXTENDING_SPEED
     }
 }
@@ -89,8 +104,8 @@ impl Shoot for Idling {
 const GRAPLED_ACTIONS: [Action; 0] = [];
 pub struct Grapled {}
 
-const IDLING_EXTENDING: [Action; 1] = [Action::Run];
-const IDLING_CONTRACTING: [Action; 1] = [Action::Run];
+const IDLING_EXTENDING: [Action; 2] = [Action::Extend, Action::StartContract];
+const IDLING_CONTRACTING: [Action; 2] = [Action::Run, Action::Contract];
 #[derive(Debug)]
 pub struct ParentChild<A, B>
 where
@@ -118,20 +133,7 @@ impl State for ParentChild<Idling, Extending> {
     }
 
     fn update(self) -> PlayerState {
-        let Self { parent, child } = self;
-        let parent = match execute_actions(IDLING_EXTENDING.into(), parent.into()) {
-            PlayerState::Idling(idling) => idling,
-            _ => panic!("Unsupported state"),
-        };
-        match child.update() {
-            HookState::Extending(child) => ParentChild { parent, child }.into(),
-            HookState::Contracting(child) => ParentChild { parent, child }.into(),
-        }
-    }
-}
-impl Run for ParentChild<Idling, Extending> {
-    fn speed(&self) -> Magnitude {
-        self.parent.speed()
+        execute_actions(IDLING_EXTENDING.into(), self.into())
     }
 }
 
@@ -144,20 +146,34 @@ impl State for ParentChild<Idling, Contracting> {
         self.parent.direction()
     }
     fn update(self) -> PlayerState {
-        let Self { parent, child } = self;
-        let parent = match execute_actions(IDLING_CONTRACTING.into(), parent.into()) {
-            PlayerState::Idling(idling) => idling,
-            _ => panic!("Unsupported state"),
-        };
-        match child.update() {
-            HookState::Extending(child) => ParentChild { parent, child }.into(),
-            HookState::Contracting(child) => ParentChild { parent, child }.into(),
-        }
+        execute_actions(IDLING_CONTRACTING.into(), self.into())
     }
 }
-impl Run for ParentChild<Idling, Contracting> {
-    fn speed(&self) -> Magnitude {
-        self.parent.speed()
+impl action::Run for ParentChild<Idling, Contracting> {
+    fn max_speed(&self) -> Magnitude {
+        self.parent.max_speed()
+    }
+
+    fn into_ok_state(self, position: Position, direction: Direction, current_speed: Magnitude) -> Self {
+        Self {
+            parent: Idling {
+                position,
+                direction,
+                current_speed,
+                ..self.parent
+            },
+            ..self
+        }
+    }
+
+    fn into_err_state(self, current_speed: Magnitude) -> Self {
+        Self {
+            parent: Idling {
+                current_speed,
+                ..self.parent
+            },
+            ..self
+        }
     }
 }
 
@@ -241,21 +257,29 @@ mod action {
     //! Action traits are used as requirements to the state executing the action, to make sure that needed data can be retrieved. The traits will usually have `State` as supertrait because position and direction are often (if not always) needed.
     //! Action traits does not themselves include a method for executing the action. This should be handled by a blanket implementation in a (free) function (e.g. [run] is a blanket implementation over the [Run] trait)
 
+    use crate::state::{self, state_machine::action::Contract};
+
     use super::*;
 
-    pub(crate) enum Action {
+    pub(super) enum Action {
         Run,
         Shoot,
+        Extend,
+        Contract,
+        StartContract,
         Dash,
         Graple,
     }
 
-    pub(crate) fn execute_actions(actions: Vec<Action>, executor: PlayerState) -> PlayerState {
+    pub(super) fn execute_actions(actions: Vec<Action>, executor: PlayerState) -> PlayerState {
         let mut state = executor;
         for action in actions {
             state = match action {
                 Action::Run => try_run(state),
                 Action::Shoot => try_shoot(state),
+                Action::Extend => try_extend(state),
+                Action::Contract => try_contract(state),
+                Action::StartContract => try_start_contract(state),
                 Action::Dash => todo!(),
                 Action::Graple => todo!(),
             };
@@ -263,44 +287,52 @@ mod action {
         state
     }
 
-    pub(crate) trait Run: State {
-        fn speed(&self) -> Magnitude;
+    pub(super) trait Run: State {
+        fn max_speed(&self) -> Magnitude;
+        fn into_ok_state(self, position: Position, direction: Direction, current_speed: Magnitude) -> Self;
+        fn into_err_state(self, current_speed: Magnitude) -> Self;
     }
-    pub(crate) fn try_run(runner: PlayerState) -> PlayerState {
+    pub(super) fn try_run(runner: PlayerState) -> PlayerState {
         match runner {
             PlayerState::Idling(state) => run(state).into(),
-            PlayerState::ParentChildIdlingContracting(state) => run(state).into(),
+            PlayerState::ParentChildIdlingContracting(state) => {
+                run(state).map(pull_chain).map_or_else(|s| s.into(), |s| s.into())
+            }
             _ => runner,
         }
     }
-    pub(crate) fn run<T: Run>(runner: T) -> Result<Idling, T> {
+    pub(super) fn run<T: Run>(runner: T) -> Result<T, T> {
         let direction = get_player_move();
         if direction.is_zero() {
-            Err(runner)
+            Err(runner.into_err_state(Magnitude::zero()))
         } else {
-            let position = Physics::calculate_new_position_from_speed(runner.position(), runner.speed(), direction);
-            Ok(Idling {
-                position,
-                direction,
-                speed: runner.speed(),
-            })
+            let current_speed = runner.max_speed();
+            let position = Physics::calculate_new_position_from_speed(runner.position(), current_speed, direction);
+            Ok(runner.into_ok_state(position, direction, current_speed))
+        }
+    }
+    fn pull_chain(state: ParentChild<Idling, Contracting>) -> ParentChild<Idling, Contracting> {
+        let position = state.position();
+        ParentChild {
+            parent: state.parent,
+            child: state.child.update_tail_position(position),
         }
     }
 
-    pub(crate) trait Shoot: State {
-        fn hook_speed(&self) -> Magnitude;
+    pub(super) trait Shoot: State {
+        fn extend_speed(&self) -> Magnitude;
     }
-    pub(crate) fn try_shoot(shooter: PlayerState) -> PlayerState {
+    pub(super) fn try_shoot(shooter: PlayerState) -> PlayerState {
         match shooter {
             PlayerState::Idling(state) => shoot(state).into(),
             _ => shooter,
         }
     }
-    pub(crate) fn shoot<T: Shoot>(shooter: T) -> Result<ParentChild<T, Extending>, T> {
+    pub(super) fn shoot<T: Shoot>(shooter: T) -> Result<ParentChild<T, Extending>, T> {
         if is_shooting() {
             Ok(ParentChild {
                 child: hook::build(
-                    shooter.hook_speed(),
+                    shooter.extend_speed(),
                     shooter.direction(),
                     shooter.position(),
                     HOOK_AMOUNT_LINKS,
@@ -309,6 +341,47 @@ mod action {
             })
         } else {
             Err(shooter)
+        }
+    }
+
+    pub(super) fn try_extend(state: PlayerState) -> PlayerState {
+        match state {
+            PlayerState::ParentChildIdlingExtending(state) => {
+                let ParentChild { parent, child } = state;
+                ParentChild {
+                    parent,
+                    child: hook::action::extend(child),
+                }
+                .into()
+            }
+            _ => state,
+        }
+    }
+
+    pub(super) fn try_contract(state: PlayerState) -> PlayerState {
+        match state {
+            PlayerState::ParentChildIdlingContracting(state) => {
+                let ParentChild { parent, child } = state;
+                if let Some(child) = hook::action::contract(child) {
+                    ParentChild { parent, child }.into()
+                } else {
+                    parent.into()
+                }
+            }
+            _ => state,
+        }
+    }
+
+    pub(super) fn try_start_contract(state: PlayerState) -> PlayerState {
+        match state {
+            PlayerState::ParentChildIdlingExtending(state) => {
+                let ParentChild { parent, child } = state;
+                match hook::action::start_contract(child) {
+                    Ok(contracting) => ParentChild { parent, child: contracting }.into(),
+                    Err(extending) => ParentChild { parent, child: extending }.into(),
+                }
+            }
+            _ => state,
         }
     }
 }

@@ -2,7 +2,6 @@ pub const PLAYER_SPEED: Magnitude = Magnitude::new(2.5);
 
 use std::fmt::Display;
 
-use either::Either::{Left, Right};
 
 use super::StateMachine;
 use crate::draw::Draw;
@@ -10,27 +9,33 @@ use crate::draw::Drawable;
 use crate::draw::graphics::Shape;
 use crate::draw::graphics::hook_graphics::HOOK_GRAPHICS;
 use crate::draw::graphics::player_graphics::*;
-use crate::input::*;
 use crate::model::*;
+use crate::state::hook::hook_chain_as_drawables;
 use crate::state::{
     StateObject,
     state_machine::{
         State,
         hook::{Contracting, Extending},
-        player::{Idling, PlayerState, ParentChild, build},
+        player::{Idling, ParentChild, PlayerState, build},
     },
 };
 use crate::util::*;
 
 pub trait StateResult<E> {
-    fn or_try<U: Into<PlayerStateMachine>, F, O: FnOnce(E) -> Result<U, F>>(self, op: O) -> Result<PlayerStateMachine, F>;
+    fn or_try<U: Into<PlayerStateMachine>, F, O: FnOnce(E) -> Result<U, F>>(
+        self,
+        op: O,
+    ) -> Result<PlayerStateMachine, F>;
 }
 
 impl<T, E> StateResult<E> for Result<T, E>
 where
     T: Into<PlayerStateMachine>,
 {
-    fn or_try<U: Into<PlayerStateMachine>, F, O: FnOnce(E) -> Result<U, F>>(self, op: O) -> Result<PlayerStateMachine, F> {
+    fn or_try<U: Into<PlayerStateMachine>, F, O: FnOnce(E) -> Result<U, F>>(
+        self,
+        op: O,
+    ) -> Result<PlayerStateMachine, F> {
         match self.map_err(op) {
             Ok(s) => Ok(s.into()),
             Err(Ok(s)) => Ok(s.into()),
@@ -56,7 +61,9 @@ impl StateMachine for PlayerStateMachine {
         match self {
             PlayerStateMachine::Idling(state) => vec![state.into()],
             PlayerStateMachine::ParentChildIdlingExtending(state) => vec![state.parent().into(), state.child().into()],
-            PlayerStateMachine::ParentChildIdlingContracting(state) => vec![state.parent().into(), state.child().into()],
+            PlayerStateMachine::ParentChildIdlingContracting(state) => {
+                vec![state.parent().into(), state.child().into()]
+            }
         }
     }
 
@@ -78,7 +85,7 @@ impl Draw for PlayerStateMachine {
                 }]
             }
             PlayerStateMachine::ParentChildIdlingExtending(state) => {
-                vec![
+                let mut vec = vec![
                     Drawable {
                         state: state.parent().into(),
                         shape: PLAYER_IDLING.into(),
@@ -87,10 +94,12 @@ impl Draw for PlayerStateMachine {
                         state: state.child().into(),
                         shape: Shape::HookObject(HOOK_GRAPHICS),
                     },
-                ]
+                ];
+                vec.append(&mut hook_chain_as_drawables(state.child().chain()));
+                vec
             }
             PlayerStateMachine::ParentChildIdlingContracting(state) => {
-                vec![
+                let mut vec = vec![
                     Drawable {
                         state: state.parent().into(),
                         shape: PLAYER_IDLING.into(),
@@ -99,7 +108,9 @@ impl Draw for PlayerStateMachine {
                         state: state.child().into(),
                         shape: Shape::HookObject(HOOK_GRAPHICS),
                     },
-                ]
+                ];
+                vec.append(&mut hook_chain_as_drawables(state.child().chain()));
+                vec
             }
         }
     }
