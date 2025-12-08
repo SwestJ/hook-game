@@ -1,7 +1,12 @@
 //! Module handling player states
 
+use crate::state::state_machine::action::{Action, Execute};
+
 use super::*;
 use action::*;
+
+// Workaround for Tracking Issue "More Qualified Paths": https://github.com/rust-lang/rust/issues/86935#issuecomment-1146670057
+type Type<T> = T;
 
 pub fn build(position: Position, direction: Direction, speed: Magnitude) -> Idling {
     Idling::idle(position, direction, speed)
@@ -39,7 +44,7 @@ pub enum Relation {
     Siblings,
 }
 
-const IDLING_ACTIONS: [Action; 2] = [Action::Run, Action::Shoot];
+const IDLING_ACTIONS: [ActionType; 2] = [ActionType::Run, ActionType::Shoot];
 
 #[derive(Debug, Default)]
 pub struct Idling {
@@ -77,35 +82,72 @@ impl Idling {
     //         .map_or_else(PlayerState::from, PlayerState::from)
     // }
 }
-impl Run for Idling {
-    fn max_speed(&self) -> Magnitude {
-        self.max_speed
-    }
 
-    fn into_ok_state(self, position: Position, direction: Direction, current_speed: Magnitude) -> Self {
-        Self {
+impl Execute<Run> for Idling {
+    fn prepare(&self) -> Run {
+        Run {
+            position: self.position,
+            max_speed: self.max_speed,
+        }
+    }
+    type OkState = Idling;
+    fn move_to_ok_state(self, output: <Run as Action>::OkOutput) -> Self::OkState {
+        let Type::<<Run as Action>::OkOutput> {
             position,
             direction,
             current_speed,
-            ..self
+        } = output;
+        Self::OkState {
+            position,
+            direction,
+            max_speed: self.max_speed,
+            current_speed,
         }
     }
-
-    fn into_err_state(self, current_speed: Magnitude) -> Self {
-        Self { current_speed, ..self }
+    type ErrState = Idling;
+    fn move_to_err_state(self, output: <Run as Action>::ErrOutput) -> Self::ErrState {
+        let Self {
+            position,
+            direction,
+            max_speed,
+            ..
+        } = self;
+        let Type::<<Run as Action>::ErrOutput> { current_speed } = output;
+        Self::OkState {
+            position,
+            direction,
+            max_speed,
+            current_speed,
+        }
     }
 }
-impl Shoot for Idling {
-    fn extend_speed(&self) -> Magnitude {
-        HOOK_EXTENDING_SPEED
+impl Execute<Shoot> for Idling {
+    fn prepare(&self) -> Shoot {
+        Shoot
+    }
+    type OkState = ParentChild<Idling, Extending>;
+    fn move_to_ok_state(self, _: <Shoot as Action>::OkOutput) -> Self::OkState {
+        ParentChild {
+            child: hook::build(
+                HOOK_EXTENDING_SPEED,
+                self.direction(),
+                self.position(),
+                HOOK_AMOUNT_LINKS,
+            ),
+            parent: self,
+        }
+    }
+    type ErrState = Self;
+    fn move_to_err_state(self, _: <Shoot as Action>::ErrOutput) -> Self::ErrState {
+        self
     }
 }
 
-const GRAPLED_ACTIONS: [Action; 0] = [];
+const GRAPLED_ACTIONS: [ActionType; 0] = [];
 pub struct Grapled {}
 
-const IDLING_EXTENDING: [Action; 2] = [Action::Extend, Action::StartContract];
-const IDLING_CONTRACTING: [Action; 2] = [Action::Run, Action::Contract];
+const IDLING_EXTENDING: [ActionType; 2] = [ActionType::Extend, ActionType::StartContract];
+const IDLING_CONTRACTING: [ActionType; 2] = [ActionType::Run, ActionType::Contract];
 #[derive(Debug)]
 pub struct ParentChild<A, B>
 where
@@ -149,30 +191,43 @@ impl State for ParentChild<Idling, Contracting> {
         execute_actions(IDLING_CONTRACTING.into(), self.into())
     }
 }
-impl action::Run for ParentChild<Idling, Contracting> {
-    fn max_speed(&self) -> Magnitude {
-        self.parent.max_speed()
+impl Execute<Run> for ParentChild<Idling, Contracting> {
+    fn prepare(&self) -> Run {
+        Run {
+            position: self.parent.position,
+            max_speed: self.parent.max_speed,
+        }
     }
-
-    fn into_ok_state(self, position: Position, direction: Direction, current_speed: Magnitude) -> Self {
-        Self {
+    type OkState = Self;
+    fn move_to_ok_state(self, output: <Run as Action>::OkOutput) -> Self::OkState {
+        let Self { parent, child } = self;
+        let Type::<<Run as Action>::OkOutput> {
+            position,
+            direction,
+            current_speed,
+        } = output;
+        Self::OkState {
             parent: Idling {
                 position,
                 direction,
+                max_speed: parent.max_speed,
                 current_speed,
-                ..self.parent
             },
-            ..self
+            child: child.update_tail_position(position),
         }
     }
-
-    fn into_err_state(self, current_speed: Magnitude) -> Self {
-        Self {
+    type ErrState = Self;
+    fn move_to_err_state(self, output: <Run as Action>::ErrOutput) -> Self::ErrState {
+        let Self { parent: Idling { position, direction, max_speed, ..}, child } = self;
+        let Type::<<Run as Action>::ErrOutput> { current_speed } = output;
+        Self::OkState {
             parent: Idling {
+                position,
+                direction,
+                max_speed,
                 current_speed,
-                ..self.parent
             },
-            ..self
+            child,
         }
     }
 }
@@ -257,11 +312,11 @@ mod action {
     //! Action traits are used as requirements to the state executing the action, to make sure that needed data can be retrieved. The traits will usually have `State` as supertrait because position and direction are often (if not always) needed.
     //! Action traits does not themselves include a method for executing the action. This should be handled by a blanket implementation in a (free) function (e.g. [run] is a blanket implementation over the [Run] trait)
 
-    use crate::state::{self, state_machine::action::Contract};
+    use crate::state::state_machine::action::{Action, Execute};
 
     use super::*;
 
-    pub(super) enum Action {
+    pub(super) enum ActionType {
         Run,
         Shoot,
         Extend,
@@ -271,76 +326,32 @@ mod action {
         Graple,
     }
 
-    pub(super) fn execute_actions(actions: Vec<Action>, executor: PlayerState) -> PlayerState {
+    pub(super) fn execute_actions(actions: Vec<ActionType>, executor: PlayerState) -> PlayerState {
         let mut state = executor;
         for action in actions {
             state = match action {
-                Action::Run => try_run(state),
-                Action::Shoot => try_shoot(state),
-                Action::Extend => try_extend(state),
-                Action::Contract => try_contract(state),
-                Action::StartContract => try_start_contract(state),
-                Action::Dash => todo!(),
-                Action::Graple => todo!(),
+                ActionType::Run => try_run(state),
+                ActionType::Shoot => try_shoot(state),
+                ActionType::Extend => try_extend(state),
+                ActionType::Contract => try_contract(state),
+                ActionType::StartContract => try_start_contract(state),
+                ActionType::Dash => todo!(),
+                ActionType::Graple => todo!(),
             };
         }
         state
     }
-
-    pub(super) trait Run: State {
-        fn max_speed(&self) -> Magnitude;
-        fn into_ok_state(self, position: Position, direction: Direction, current_speed: Magnitude) -> Self;
-        fn into_err_state(self, current_speed: Magnitude) -> Self;
-    }
-    pub(super) fn try_run(runner: PlayerState) -> PlayerState {
-        match runner {
-            PlayerState::Idling(state) => run(state).into(),
-            PlayerState::ParentChildIdlingContracting(state) => {
-                run(state).map(pull_chain).map_or_else(|s| s.into(), |s| s.into())
-            }
-            _ => runner,
+    pub(super) fn try_shoot(state: PlayerState) -> PlayerState {
+        match state {
+            PlayerState::Idling(state) => Execute::<Shoot>::execute(state).into(),
+            _ => state,
         }
     }
-    pub(super) fn run<T: Run>(runner: T) -> Result<T, T> {
-        let direction = get_player_move();
-        if direction.is_zero() {
-            Err(runner.into_err_state(Magnitude::zero()))
-        } else {
-            let current_speed = runner.max_speed();
-            let position = Physics::calculate_new_position_from_speed(runner.position(), current_speed, direction);
-            Ok(runner.into_ok_state(position, direction, current_speed))
-        }
-    }
-    fn pull_chain(state: ParentChild<Idling, Contracting>) -> ParentChild<Idling, Contracting> {
-        let position = state.position();
-        ParentChild {
-            parent: state.parent,
-            child: state.child.update_tail_position(position),
-        }
-    }
-
-    pub(super) trait Shoot: State {
-        fn extend_speed(&self) -> Magnitude;
-    }
-    pub(super) fn try_shoot(shooter: PlayerState) -> PlayerState {
-        match shooter {
-            PlayerState::Idling(state) => shoot(state).into(),
-            _ => shooter,
-        }
-    }
-    pub(super) fn shoot<T: Shoot>(shooter: T) -> Result<ParentChild<T, Extending>, T> {
-        if is_shooting() {
-            Ok(ParentChild {
-                child: hook::build(
-                    shooter.extend_speed(),
-                    shooter.direction(),
-                    shooter.position(),
-                    HOOK_AMOUNT_LINKS,
-                ),
-                parent: shooter,
-            })
-        } else {
-            Err(shooter)
+    pub(super) fn try_run(state: PlayerState) -> PlayerState {
+        match state {
+            PlayerState::Idling(state) => Execute::<Run>::execute(state).into(),
+            PlayerState::ParentChildIdlingContracting(state) => Execute::<Run>::execute(state).into(),
+            _ => state,
         }
     }
 
@@ -377,11 +388,65 @@ mod action {
             PlayerState::ParentChildIdlingExtending(state) => {
                 let ParentChild { parent, child } = state;
                 match hook::action::start_contract(child) {
-                    Ok(contracting) => ParentChild { parent, child: contracting }.into(),
-                    Err(extending) => ParentChild { parent, child: extending }.into(),
+                    Ok(contracting) => ParentChild {
+                        parent,
+                        child: contracting,
+                    }
+                    .into(),
+                    Err(extending) => ParentChild {
+                        parent,
+                        child: extending,
+                    }
+                    .into(),
                 }
             }
             _ => state,
+        }
+    }
+
+    pub struct Run {
+        pub position: Position,
+        pub max_speed: Magnitude,
+    }
+    pub struct OkRun {
+        pub position: Position,
+        pub direction: Direction,
+        pub current_speed: Magnitude,
+    }
+    pub struct ErrRun {
+        pub current_speed: Magnitude,
+    }
+    impl Action for Run {
+        type OkOutput = OkRun;
+        type ErrOutput = ErrRun;
+        fn execute<T: Execute<Self>>(self, state: T) -> Result<T::OkState, T::ErrState> {
+            let direction = get_player_move();
+            if direction.is_zero() {
+                Err(state.move_to_err_state(ErrRun {
+                    current_speed: Magnitude::zero(),
+                }))
+            } else {
+                let current_speed = self.max_speed;
+                let position = Physics::calculate_new_position_from_speed(self.position, current_speed, direction);
+                Ok(state.move_to_ok_state(OkRun {
+                    position,
+                    direction,
+                    current_speed,
+                }))
+            }
+        }
+    }
+
+    pub struct Shoot;
+    impl Action for Shoot {
+        type OkOutput = ();
+        type ErrOutput = ();
+        fn execute<T: Execute<Self>>(self, state: T) -> Result<T::OkState, T::ErrState> {
+            if is_shooting() {
+                Ok(state.move_to_ok_state(()))
+            } else {
+                Err(state.move_to_err_state(()))
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 use std::{fmt::Display, vec};
 
 use crate::{
+    collision,
     draw::{
         Draw, Drawable,
         graphics::{Shape, item_graphics::ITEM_GRAPHICS},
@@ -40,7 +41,7 @@ impl StateMachine for ItemStateMachine {
     fn update(self) -> Self {
         match self {
             ItemStateMachine::Moving(moving) => moving.update().into(),
-            ItemStateMachine::Hooked(hooked) => todo!(),
+            ItemStateMachine::Hooked(hooked) => hooked.update().into(),
         }
     }
 }
@@ -57,6 +58,28 @@ impl Draw for ItemStateMachine {
                 shape: Shape::ItemObject(ITEM_GRAPHICS),
             }],
         }
+    }
+}
+impl collision::Collision for ItemStateMachine {
+    fn collision_box(&self) -> Vec<collision::CollisionBox> {
+        match self {
+            ItemStateMachine::Moving(state) => vec![Self::bounds(
+                ITEM_GRAPHICS
+                    .model
+                    .rotate(state.direction())
+                    .translate(state.position()),
+            )],
+            ItemStateMachine::Hooked(state) => vec![Self::bounds(
+                ITEM_GRAPHICS
+                    .model
+                    .rotate(state.direction())
+                    .translate(state.position()),
+            )],
+        }
+    }
+
+    fn collision_detected(&self /*other object */) {
+        todo!()
     }
 }
 impl Display for ItemStateMachine {

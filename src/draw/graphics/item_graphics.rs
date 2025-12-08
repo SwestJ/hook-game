@@ -1,8 +1,8 @@
 use super::*;
 
-const ITEM_NUMBER_OF_VERTICES: usize = ITEM_GRAPHICS_ARRAY.len() * ITEM_GRAPHICS_ARRAY[0].0.len();
-const ITEM_GRAPHICS_ARRAY: [Vertices<3>; 4] =
-    [triangle(0, 0), triangle(0, 1), triangle(1, 0), triangle(1, 1)];
+const ITEM_NUMBER_OF_VERTICES: usize = ITEM_GRAPHICS_ARRAY.len() * 3;
+const ITEM_GRAPHICS_ARRAY: [(i32, i32); 4] =
+    [(0, 0), (0, 1), (1, 0), (1, 1)];
 
 #[derive(Clone, Debug)]
 pub struct ItemGraphics {
@@ -10,6 +10,6 @@ pub struct ItemGraphics {
     pub color: Color,
 }
 pub const ITEM_GRAPHICS: ItemGraphics = ItemGraphics {
-    model: create_vertex_graphics(ITEM_GRAPHICS_ARRAY).rotate_const(DOWN.value()).scale_const(10.0),
+    model: vertex_graphics_from_triangle_points(ITEM_GRAPHICS_ARRAY).rotate_const(DOWN.value()).scale_const(10.0),
     color: PINK,
 };

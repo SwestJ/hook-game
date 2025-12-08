@@ -13,6 +13,7 @@ use crate::util::name_of_type;
 pub mod player;
 pub mod hook;
 pub mod item;
+pub mod action;
 
 pub const HOOK_AMOUNT_LINKS: usize = 40;
 pub const HOOK_LINK_LENGTH: f32 = 20.0;
@@ -31,34 +32,4 @@ pub trait State {
     fn update(self) -> Self::Output;
 }
 
-// trait ActionTrait {
-//     type Output: State;
-//     type Input;
-//     fn into_state() -> Self::Output;
-//     fn action_object() -> Self::Input;
-// }
-// trait TryAction: ActionTrait {
-//     type Err: State;
-//     fn into_err_state() -> Self::Err;
-// }
 
-// trait Jump: TryAction {
-// }
-// struct JumpObject {height: f32}
-
-// impl ActionTrait for Idling {
-//     type Output;
-
-//     type Input;
-
-//     fn into_state() -> Self::Output {
-//         todo!()
-//     }
-
-//     fn action_object() -> Self::Input {
-//         todo!()
-//     }
-// }
-// impl Jump for Idling {
-
-// }

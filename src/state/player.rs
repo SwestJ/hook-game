@@ -1,9 +1,11 @@
 pub const PLAYER_SPEED: Magnitude = Magnitude::new(2.5);
 
 use std::fmt::Display;
-
+use std::vec;
 
 use super::StateMachine;
+use crate::collision;
+use crate::collision::CollisionBox;
 use crate::draw::Draw;
 use crate::draw::Drawable;
 use crate::draw::graphics::Shape;
@@ -81,14 +83,14 @@ impl Draw for PlayerStateMachine {
             PlayerStateMachine::Idling(state) => {
                 vec![Drawable {
                     state: state.into(),
-                    shape: PLAYER_IDLING.into(), //todo choose shape based on player speed
+                    shape: Shape::PlayerObject(PLAYER_ANIMATION.current_frame()), //todo choose shape based on player speed
                 }]
             }
             PlayerStateMachine::ParentChildIdlingExtending(state) => {
                 let mut vec = vec![
                     Drawable {
                         state: state.parent().into(),
-                        shape: PLAYER_IDLING.into(),
+                        shape: Shape::PlayerObject(PLAYER_GRAPHICS),
                     },
                     Drawable {
                         state: state.child().into(),
@@ -102,7 +104,7 @@ impl Draw for PlayerStateMachine {
                 let mut vec = vec![
                     Drawable {
                         state: state.parent().into(),
-                        shape: PLAYER_IDLING.into(),
+                        shape: Shape::PlayerObject(PLAYER_GRAPHICS),
                     },
                     Drawable {
                         state: state.child().into(),
@@ -113,6 +115,54 @@ impl Draw for PlayerStateMachine {
                 vec
             }
         }
+    }
+}
+impl collision::Collision for PlayerStateMachine {
+    fn collision_box(&self) -> Vec<collision::CollisionBox> {
+        match self {
+            PlayerStateMachine::Idling(state) => {
+                let position = state.position();
+                let direction = state.direction();
+                let object = PLAYER_GRAPHICS;
+                vec![Self::bounds(object.model.rotate(direction).translate(position))]
+            }
+            PlayerStateMachine::ParentChildIdlingExtending(state) => {
+                vec![
+                    Self::bounds(
+                        PLAYER_GRAPHICS
+                            .model
+                            .rotate(state.direction())
+                            .translate(state.position()),
+                    ),
+                    Self::bounds(
+                        HOOK_GRAPHICS
+                            .model
+                            .rotate(state.child().direction())
+                            .translate(state.child().position()),
+                    ),
+                ]
+            }
+            PlayerStateMachine::ParentChildIdlingContracting(state) => {
+                vec![
+                    Self::bounds(
+                        PLAYER_GRAPHICS
+                            .model
+                            .rotate(state.direction())
+                            .translate(state.position()),
+                    ),
+                    Self::bounds(
+                        HOOK_GRAPHICS
+                            .model
+                            .rotate(state.child().direction())
+                            .translate(state.child().position()),
+                    ),
+                ]
+            }
+        }
+    }
+
+    fn collision_detected(&self /*other object */) {
+        todo!()
     }
 }
 

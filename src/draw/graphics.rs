@@ -1,6 +1,5 @@
 use std::{
-    ops::{Add, Deref, DerefMut},
-    process::Output,
+    f32::consts::PI, ops::{Add, Deref, DerefMut}, process::Output
 };
 
 use macroquad::{
@@ -11,10 +10,9 @@ use serde::{Deserialize, Serialize};
 use typenum::P5;
 
 use super::*;
-use crate::model::*;
+use crate::{draw::graphics::player_graphics::PlayerGraphics, model::*};
 use hook_graphics::*;
 use item_graphics::*;
-use player::*;
 
 pub mod hook_graphics;
 pub mod item_graphics;
@@ -73,11 +71,18 @@ const fn triangle(ix: i32, ia: i32) -> Vertices<3> {
         triangle_inner((ix - 1) as f32, ia as f32, -1.0)
     }
 }
+const fn triangles<const N: usize>(points: [(f32, f32); N]) -> [Vertices<3>; N] {
+    let i = 0;
+    while i < points.len() {
 
-const fn create_vertex_graphics<const N: usize, const M: usize, const O: usize>(
-    array: [Vertices<M>; O],
+    }
+    todo!()
+}
+
+const fn vertex_graphics_from_triangle_points<const N: usize, const O: usize>(
+    array: [(i32, i32); O],
 ) -> Vertices<N> {
-    VerticesBuilder::<N, M, 0>::new().fill(array).build()
+    VerticesBuilder::<N, 3, 0>::new().fill_triangles(array).build()
 }
 
 pub trait IShape<T: IBuilder<Self>>: Sized {
@@ -93,6 +98,7 @@ pub trait IBuilder<T: IShape<Self>>: Sized + Default {}
 pub enum Shape {
     HookObject(HookGraphics),
     ItemObject(ItemGraphics),
+    PlayerObject(PlayerGraphics),
     Polygon(Polygon),
     Rectangle(Rectangle),
     Triangle(Triangle),
@@ -176,7 +182,7 @@ impl TriangleVertices {
 #[derive(Debug, Copy, Clone)]
 pub struct Vertices<const N: usize>(pub [Vec2; N]);
 impl<const N: usize> Vertices<N> {
-    fn value(&self) -> [Vec2; N] {
+    pub fn value(&self) -> [Vec2; N] {
         self.0
     }
 }
@@ -353,6 +359,24 @@ impl<const N: usize, const M: usize, const I: usize> VerticesBuilder<N, M, I> {
             let mut m = 0;
             while m < M {
                 self.vertices.0[m + o * M] = from[o].0[m];
+                m += 1;
+            }
+            o += 1;
+        }
+        VerticesBuilder { vertices: self.vertices, index: N }
+    }
+}
+impl<const N: usize, const I: usize> VerticesBuilder<N, 3, I> {
+    pub const fn fill_triangles<const O: usize>(
+        mut self,
+        from: [(i32, i32); O],
+    ) -> VerticesBuilder<N, 3, N> {
+        let mut o = 0;
+        while o < O {
+            let mut m = 0;
+            let v = triangle(from[o].0, from[o].1);
+            while m < 3 {
+                self.vertices.0[m + o * 3] = v.0[m];
                 m += 1;
             }
             o += 1;

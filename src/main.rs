@@ -3,6 +3,7 @@
 use std::thread::sleep;
 use std::time::Duration;
 
+use crate::collision::collisions;
 use crate::colors::*;
 use crate::draw::*;
 use crate::model::*;
@@ -31,6 +32,7 @@ const DRAW_SCREEN_HEIGHT: f32 = 800.0;
 const DEBUG_DRAW_STATE_TEXT: bool = true;
 const DEBUG_DRAW_GRID: bool = true;
 const DEBUG_DRAW_ORIGIN_FACTOR: Vec2 = Vec2::new(0.5, 0.5);
+const DEBUG_DRAW_COLLISION_BOXES: bool = true;
 
 #[macroquad::main("Hook")]
 async fn main() {
@@ -46,6 +48,7 @@ async fn main() {
         mq::clear_background(BLACK.into());
         invoke_states(&mut states);
         draw_states(&states);
+        collisions(&states);
 
         if DEBUG_DRAW_STATE_TEXT {
             debug_draw_state_text(&states);

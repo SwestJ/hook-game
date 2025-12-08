@@ -21,7 +21,7 @@ impl StateMachineEnum {
         match self {
             StateMachineEnum::Player(player_state_enum) => StateMachineEnum::Player(player_state_enum.update()),
             StateMachineEnum::Item(item_state_enum) => StateMachineEnum::Item(item_state_enum.update()),
-            StateMachineEnum::Default => panic!("Default invariant should not be used"),
+            StateMachineEnum::Default => panic!("Default variant should not be used"),
         }
     }
 }
@@ -30,7 +30,7 @@ impl StateMachine for StateMachineEnum {
         match self {
             StateMachineEnum::Player(player_state) => player_state.state_object(),
             StateMachineEnum::Item(item_state) => todo!(),
-            StateMachineEnum::Default => todo!(),
+            StateMachineEnum::Default => panic!("Default variant should not be used"),
         }
     }
 
@@ -43,8 +43,21 @@ impl Draw for StateMachineEnum {
         match self {
             StateMachineEnum::Player(player_state) => player_state.drawable(),
             StateMachineEnum::Item(item_state) => item_state.drawable(),
-            StateMachineEnum::Default => todo!(),
+            StateMachineEnum::Default => panic!("Default variant should not be used"),
         }
+    }
+}
+impl collision::Collision for StateMachineEnum {
+    fn collision_box(&self) -> Vec<collision::CollisionBox> {
+        match self {
+            StateMachineEnum::Player(state) => state.collision_box(),
+            StateMachineEnum::Item(state) => state.collision_box(),
+            StateMachineEnum::Default => panic!("Default variant should not be used"),
+        }
+    }
+
+    fn collision_detected(&self, /*other object */) {
+        todo!()
     }
 }
 impl Display for StateMachineEnum {
