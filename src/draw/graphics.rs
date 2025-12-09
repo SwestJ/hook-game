@@ -25,7 +25,6 @@ pub const THETA3: Angle<Radians> = Angle(Radians(PI));
 pub const THETA4: Angle<Radians> = Angle(Radians(4.0 * PI / 3.0));
 pub const THETA5: Angle<Radians> = Angle(Radians(5.0 * PI / 3.0));
 
-pub const UNIT_CIRCLE_RADIUS: f32 = 1.0;
 pub const UNIT_TRIANGLE_HEIGHT: f32 = 1.5;
 pub const SIN_PI_OVER_3: f32 = 0.866_025_4;
 pub const UNIT_TRIANGLE_SLOPE: f32 = SIN_PI_OVER_3 / UNIT_TRIANGLE_HEIGHT;
@@ -242,102 +241,16 @@ pub struct VerticesBuilder<const N: usize, const M: usize, const I: usize> {
     index: usize,
 }
 
-pub struct VerticesBuilder2<const N: usize, const M: usize> {
-    vertices: Vertices<N>,
-    index: usize,
-}
-
-impl<const N: usize, const M: usize> VerticesBuilder2<N, M> {
-    pub const fn fill<const O: usize>(
-        mut self,
-        from: [Vertices<M>; O],
-    ) -> VerticesBuilder<N, M, N> {
-        let mut vertices = Vertices([Vec2::NAN; N]);
-        let mut o = 0;
-        while o < O {
-            let mut m = 0;
-            while m < M {
-                vertices.0[m + o * M] = from[o].0[m];
-                m += 1;
-            }
-            o += 1;
-        }
-        VerticesBuilder { vertices: self.vertices, index: N }
-    }
-}
-
 impl<const N: usize, const M: usize> VerticesBuilder<N, M, 0> {
     pub const fn new() -> Self {
         VerticesBuilder { vertices: Vertices([Vec2::NAN; N]), index: 0 }
     }
 }
 
-pub trait GenericSize<const I: usize> {
-    const INDEX: usize;
-    type Item;
-
-    fn insert<const J: usize>(self, from: Self::Item) -> impl GenericSize<J>;
-}
-
-pub struct _VerticesBuilder<const N: usize, T: IndexState> {
-    vertices: Vertices<N>,
-    index: T,
-}
-pub trait IndexState {}
-pub struct IndexZero();
-impl IndexState for IndexZero {}
-pub struct IndexNonZero();
-impl IndexState for IndexNonZero {}
-pub struct IndexLast();
-impl IndexState for IndexLast {}
-// pub trait GenSize {
-//     type Index: IndexState;
-//     type Next: IndexState;
-// }
-
-pub trait Insert {
-    type Item;
-    type Index: IndexState;
-    type Next: IndexState;
-    type Output: Insert<Index = Self::Next>;
-    fn insert(self, _: Self::Item) -> Output;
-}
-// impl<const N: usize, T> GenSize for _VerticesBuilder<N, T> {
-//     type Index = IndexZero;
-//     type Next = IndexNonZero;
-// }
-impl<const N: usize> Insert for _VerticesBuilder<N, IndexZero> {
-    type Item = Vertices<3>;
-    type Index = IndexZero;
-    type Next = IndexNonZero;
-    type Output = _VerticesBuilder<N, IndexNonZero>;
-
-    fn insert(self, _: Self::Item) -> Output {
-        todo!()
-    }
-}
-impl<const N: usize> Insert for _VerticesBuilder<N, IndexNonZero> {
-    type Item = Vertices<3>;
-    type Index = IndexNonZero;
-    type Next = IndexLast;
-    type Output = _VerticesBuilder<N, IndexLast>;
-
-    fn insert(self, _: Self::Item) -> Output {
-        todo!()
-    }
-}
-impl<const N: usize> Insert for _VerticesBuilder<N, IndexLast> {
-    type Item = Vertices<3>;
-    type Index = IndexLast;
-    type Next = IndexLast;
-    type Output = _VerticesBuilder<N, IndexLast>;
-
-    fn insert(self, _: Self::Item) -> Output {
-        todo!()
-    }
-}
-
 impl<const N: usize, const M: usize, const I: usize> VerticesBuilder<N, M, I> {
+    pub const fn build(self) -> Vertices<N> {
+        self.vertices
+    }
     pub const fn insert<const J: usize>(mut self, from: Vertices<M>) -> VerticesBuilder<N, M, J> {
         assert!(I + M <= N, "Index would be out-of-bounds");
         assert!(I == self.index, "Index does not match expected value");
@@ -385,58 +298,12 @@ impl<const N: usize, const I: usize> VerticesBuilder<N, 3, I> {
     }
 }
 
-// impl<const N: usize, const I: usize> VerticesBuilder<N, I> {
-//     pub const fn insert<const M: usize, const J: usize>(mut self, from: Vertices<M>) -> VerticesBuilder<N, J> {
-//         assert!(I + M <= N);
-//         assert!(J == I + M);
-
-//         let mut i = 0;
-//         while i < M {
-//             self.vertices.0[I + i] = from.0[i];
-//             i += 1;
-//         }
-//         VerticesBuilder { vertices: self.vertices, index: J }
-//     }
-// }
-
-impl<const N: usize, const M: usize> VerticesBuilder<N, M, N> {
-    pub const fn build(self) -> Vertices<N> {
-        self.vertices
-    }
-}
-
-pub struct V2(pub Vec2);
-impl AsRef<Vec2> for V2 {
-    fn as_ref(&self) -> &Vec2 {
-        &self.0
-    }
-}
 const fn rotate(lhs: Vec2, rhs: Vec2) -> Vec2 {
     Vec2 { x: lhs.x * rhs.x - lhs.y * rhs.y, y: lhs.y * rhs.x + lhs.x * rhs.y }
 }
 const fn translate(lhs: Vec2, rhs: Vec2) -> Vec2 {
     Vec2 { x: lhs.x + rhs.x, y: lhs.y + rhs.y }
 }
-// impl Vertices<3> {
-//     pub fn rotate<T: AsRef<Vec2>>(self, vec: T) -> Self {
-//         let Self([v1, v2, v3]) = self;
-//         let vec = vec.as_ref();
-//         Self ([
-//             vec.rotate(v1),
-//             vec.rotate(v2),
-//             vec.rotate(v3),
-//         ])
-//     }
-//     pub fn translate<T: AsRef<Vec2>>(self, vec: T) -> Self {
-//         let Self([v1, v2, v3]) = self;
-//         let vec = vec.as_ref().to_owned();
-//         Self ([
-//             vec + v1,
-//             vec + v2,
-//             vec + v3,
-//         ])
-//     }
-// }
 
 #[derive(Clone, Copy, Debug)]
 pub struct TriangleEquilateral {

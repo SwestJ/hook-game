@@ -46,7 +46,7 @@ async fn main() {
         // Use like "MOVEMENT_SPEED * delta_time;"
 
         mq::clear_background(BLACK.into());
-        invoke_states(&mut states);
+        update_states(&mut states);
         draw_states(&states);
         collisions(&states);
 
@@ -68,7 +68,7 @@ fn init_item() -> StateMachineEnum {
     StateMachineEnum::Item(ItemStateMachine::Moving(build(Position::new(200.0, 200.0), RIGHT, Magnitude::new(1.0))))
 }
 
-fn invoke_states(states: &mut [StateMachineEnum]) {
+fn update_states(states: &mut [StateMachineEnum]) {
     for state in states.iter_mut() {
         let s1 = std::mem::take(state);
         let s2 = s1.update();
