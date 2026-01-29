@@ -10,27 +10,27 @@ pub mod player;
 pub mod state_machine;
 
 #[derive(Default)]
-pub enum StateMachineEnum {
+pub enum StateMachineType {
     Player(PlayerStateMachine),
     Item(ItemStateMachine),
     #[default]
     Default,
 }
-impl StateMachineEnum {
+impl StateMachineType {
     pub fn update(self) -> Self {
         match self {
-            StateMachineEnum::Player(player_state_enum) => StateMachineEnum::Player(player_state_enum.update()),
-            StateMachineEnum::Item(item_state_enum) => StateMachineEnum::Item(item_state_enum.update()),
-            StateMachineEnum::Default => panic!("Default variant should not be used"),
+            StateMachineType::Player(player_state_enum) => StateMachineType::Player(player_state_enum.update()),
+            StateMachineType::Item(item_state_enum) => StateMachineType::Item(item_state_enum.update()),
+            StateMachineType::Default => panic!("Default variant should not be used"),
         }
     }
 }
-impl StateMachine for StateMachineEnum {
+impl StateMachine for StateMachineType {
     fn state_object(&self) -> Vec<StateObject> {
         match self {
-            StateMachineEnum::Player(player_state) => player_state.state_object(),
-            StateMachineEnum::Item(item_state) => todo!(),
-            StateMachineEnum::Default => panic!("Default variant should not be used"),
+            StateMachineType::Player(player_state) => player_state.state_object(),
+            StateMachineType::Item(item_state) => todo!(),
+            StateMachineType::Default => panic!("Default variant should not be used"),
         }
     }
 
@@ -38,21 +38,21 @@ impl StateMachine for StateMachineEnum {
         self.update()
     }
 }
-impl Draw for StateMachineEnum {
+impl Draw for StateMachineType {
     fn drawable(&self) -> Vec<Drawable> {
         match self {
-            StateMachineEnum::Player(player_state) => player_state.drawable(),
-            StateMachineEnum::Item(item_state) => item_state.drawable(),
-            StateMachineEnum::Default => panic!("Default variant should not be used"),
+            StateMachineType::Player(player_state) => player_state.drawable(),
+            StateMachineType::Item(item_state) => item_state.drawable(),
+            StateMachineType::Default => panic!("Default variant should not be used"),
         }
     }
 }
-impl collision::Collision for StateMachineEnum {
+impl collision::Collision for StateMachineType {
     fn collision_box(&self) -> Vec<collision::CollisionBox> {
         match self {
-            StateMachineEnum::Player(state) => state.collision_box(),
-            StateMachineEnum::Item(state) => state.collision_box(),
-            StateMachineEnum::Default => panic!("Default variant should not be used"),
+            StateMachineType::Player(state) => state.collision_box(),
+            StateMachineType::Item(state) => state.collision_box(),
+            StateMachineType::Default => panic!("Default variant should not be used"),
         }
     }
 
@@ -60,12 +60,12 @@ impl collision::Collision for StateMachineEnum {
         todo!()
     }
 }
-impl Display for StateMachineEnum {
+impl Display for StateMachineType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StateMachineEnum::Player(state_enum) => write!(f, "{}", state_enum),
-            StateMachineEnum::Item(item_state) => write!(f, "{}", item_state),
-            StateMachineEnum::Default => write!(f, "Default"),
+            StateMachineType::Player(state_enum) => write!(f, "{}", state_enum),
+            StateMachineType::Item(item_state) => write!(f, "{}", item_state),
+            StateMachineType::Default => write!(f, "Default"),
         }
     }
 }

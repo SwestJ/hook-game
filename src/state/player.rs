@@ -162,7 +162,14 @@ impl collision::Collision for PlayerStateMachine {
     }
 
     fn collision_detected(&self /*other object */) {
-        todo!()
+        match self {
+            PlayerStateMachine::Idling(idling) => {
+                
+                todo!()
+            },
+            PlayerStateMachine::ParentChildIdlingExtending(parent_child) => todo!(),
+            PlayerStateMachine::ParentChildIdlingContracting(parent_child) => todo!(),
+        }
     }
 }
 

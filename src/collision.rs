@@ -24,13 +24,17 @@ use crate::{
 use super::*;
 use itertools::Itertools;
 
-pub fn collisions(states: &[StateMachineEnum]) {
-    let collision_boxes: Vec<CollisionBox> = states.iter().flat_map(StateMachineEnum::collision_box).collect();
+pub fn collisions(states: &[StateMachineType]) {
+    let collision_boxes: Vec<CollisionBox> = states.iter().flat_map(StateMachineType::collision_box).collect();
     let collisions = find_collisions(&collision_boxes);
 
     if DEBUG_DRAW_COLLISION_BOXES {
         draw::debug_draw_collision_boxes(&collision_boxes, RED);
         draw::debug_draw_collided_boxes(&collisions, GREEN);
+    }
+
+    for collision in collisions {
+
     }
 }
 

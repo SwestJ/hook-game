@@ -7,7 +7,7 @@ use crate::collision::collisions;
 use crate::colors::*;
 use crate::draw::*;
 use crate::model::*;
-use crate::state::StateMachineEnum;
+use crate::state::StateMachineType;
 use crate::state::player::PLAYER_SPEED;
 use crate::state::player::PlayerStateMachine;
 use crate::state::item::*;
@@ -60,15 +60,15 @@ async fn main() {
     }
 }
 
-fn init_player() -> StateMachineEnum {
-    StateMachineEnum::Player(PlayerStateMachine::new(Position::new(200.0, 200.0), RIGHT, PLAYER_SPEED))
+fn init_player() -> StateMachineType {
+    StateMachineType::Player(PlayerStateMachine::new(Position::new(200.0, 200.0), RIGHT, PLAYER_SPEED))
 }
 
-fn init_item() -> StateMachineEnum {
-    StateMachineEnum::Item(ItemStateMachine::Moving(build(Position::new(200.0, 200.0), RIGHT, Magnitude::new(1.0))))
+fn init_item() -> StateMachineType {
+    StateMachineType::Item(ItemStateMachine::Moving(build(Position::new(200.0, 200.0), RIGHT, Magnitude::new(1.0))))
 }
 
-fn update_states(states: &mut [StateMachineEnum]) {
+fn update_states(states: &mut [StateMachineType]) {
     for state in states.iter_mut() {
         let s1 = std::mem::take(state);
         let s2 = s1.update();

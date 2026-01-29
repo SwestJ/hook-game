@@ -8,7 +8,7 @@ use crate::DEBUG_DRAW_ORIGIN_FACTOR;
 use crate::collision;
 use crate::model::*;
 use crate::state::StateMachine;
-use crate::state::StateMachineEnum;
+use crate::state::StateMachineType;
 use crate::state::StateObject;
 use colors::*;
 use graphics::*;
@@ -17,9 +17,9 @@ pub mod colors;
 pub mod graphics;
 
 //* Drawing */
-pub fn draw_states(states: &[StateMachineEnum]) {
+pub fn draw_states(states: &[StateMachineType]) {
     let origin = Position::from_vec(Vec2::new(mq::screen_width() / 2.0, mq::screen_height() / 2.0));
-    let drawables: Vec<Drawable> = states.iter().flat_map(StateMachineEnum::drawable).collect();
+    let drawables: Vec<Drawable> = states.iter().flat_map(StateMachineType::drawable).collect();
     drawables.into_iter().for_each(draw_drawable);
 }
 
@@ -119,7 +119,7 @@ pub fn debug_draw_grid() {
     );
 }
 
-pub fn debug_draw_state_text(states: &[StateMachineEnum]) {
+pub fn debug_draw_state_text(states: &[StateMachineType]) {
     mq::draw_fps();
     let debug_text = states.iter().fold(String::new(), |acc, s| format!("{}\n{}", acc, s));
     mq::draw_multiline_text(debug_text.as_str(), 20.0, 20.0, 20.0, None, macroquad::color::RED);
